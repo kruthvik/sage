@@ -22,11 +22,13 @@ if (process.argv.includes("--inspect-home")) {
   const forbidden = /(^|\/)(?:\.learn|\.pi|\.feynman|\.codex|\.obsidian|sessions|data|backups|exports|node_modules)(\/|$)|(^|\/)(?:auth|brain|settings|models-store|keybindings)\.(?:json|md)$|\.(?:sqlite(?:3|-wal|-shm)?|db(?:-wal|-shm)?|jsonl)$|(^|\/)\.env(?:\.|$)|outputs\/(?:\.plans|\.drafts|start\.md)|docs\/plans\//i;
   const privateContent = /(?:C:[\\/]Users[\\/][^\s`"']+)|(?:gh[pousr]_[A-Za-z0-9]{20,})|(?:github_pat_[A-Za-z0-9_]{20,})|(?:sk-[A-Za-z0-9_-]{24,})|(?:-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)/;
   for (const filename of filenames) {
-    if (forbidden.test(filename)) findings.push(`${filename}: private/runtime path`);
+    // Only the repository-root blank boilerplate is publishable; home copies remain private.
+    if (filename !== "brain.md" && forbidden.test(filename)) findings.push(`${filename}: private/runtime path`);
     // Check the staged bytes, not an unstaged local replacement.
     const child = Bun.spawn(["git", "show", `:${filename}`], { stdout: "pipe", stderr: "pipe" });
     const content = await new Response(child.stdout).text();
     if (await child.exited) throw new Error(`Cannot inspect staged file: ${filename}`);
+    if (filename === "brain.md" && new Bun.CryptoHasher("sha256").update(content.replace(/\r\n/g, "\n")).digest("hex") !== "870f06bbfde9a285e5381fbef6714a1d5950d3413083e029faed42d6dd590ef2") findings.push("brain.md: modified boilerplate may contain personal preferences; update the reviewed template hash deliberately");
     if (privateContent.test(content)) findings.push(`${filename}: private path or credential-like content`);
   }
   if (findings.length) throw new Error(`Publication blocked:\n${findings.join("\n")}`);

@@ -11,6 +11,8 @@ import { resetPi, rollbackPi, updatePi } from "../../../packages/pi/src/updates.
 import { manageResources, manageTheme } from "../../../packages/pi/src/resources.ts";
 import { projectComponents } from "../../../packages/storage/src/projection.ts";
 import { formatLearningStatus } from "../../../packages/core/src/status.ts";
+import { evaluateLearning } from "../../../packages/runtime/src/evaluation.ts";
+import type { Artifact } from "../../../packages/core/src/contracts.ts";
 import { open, readFile, writeFile } from "node:fs/promises";
 import { unlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -24,7 +26,7 @@ let service: LearningService | undefined;
 
 const usage = `Sato · Pi's native terminal, focused on learning\n\nlearn                              Open the tutor\nlearn install SOURCE --trust       Add a Pi package or local extension file\nlearn remove SOURCE                Remove a package (uninstall is an alias)\nlearn list                         List installed packages\nlearn update                       Update Pi for Sato only\nlearn update --extensions --trust   Update installed packages\nlearn update SOURCE --trust         Update one package\nlearn extensions                   List loaded extensions\nlearn extensions enable PATH --trust | disable PATH\nlearn config                       Show extensions, skills, prompts and themes\nlearn theme list | set NAME         Choose a theme\nlearn status                       Show your learning progress\nlearn demo                         Try an offline lesson\nlearn doctor                       Check setup\nlearn --version                    Show the selected Pi version\nlearn help --all                   Show advanced commands\n\nInside the tutor: /login, /model, /learn, /exam, /status, /settings, /reload, /stop, /quit.\nInstall sources: npm:PACKAGE, git:REPOSITORY, or a local path.\nExtensions have OS privileges; review their code before using --trust.\nSATO_HOME defaults to ~/.learn. Global Pi is unchanged.\n`;
 
-const advancedUsage = `${usage}\nAdvanced commands (existing aliases remain supported):\nlearn init\nlearn source add PATH | list | preview ID | accept ID | remove ID\nlearn brain show | edit\nlearn pi info | update [VERSION] | rollback | reset\nlearn plugin list | add SOURCE --trust | remove SOURCE | update [SOURCE] --trust\nlearn resource list | add|remove|enable|disable KIND PATH [--trust]\nlearn extensions add PATH --trust | remove PATH\nlearn export FILE | backup FILE | restore FILE\nlearn --smoke [--debug]\n\nCustomization commands accept --json for scripting.\nPDF/OCR, audio and simulations are deferred.\n`;
+const advancedUsage = `${usage}\nAdvanced commands (existing aliases remain supported):\nlearn init\nlearn source add PATH | list | preview ID | accept ID | remove ID\nlearn brain show | edit\nlearn capabilities\nlearn artifact add TYPE FILE [INSTANCE_ID] | show ID | export ID FILE\nlearn evaluate\nlearn pi info | update [VERSION] | rollback | reset\nlearn plugin list | add SOURCE --trust | remove SOURCE | update [SOURCE] --trust\nlearn resource list | add|remove|enable|disable KIND PATH [--trust]\nlearn extensions add PATH --trust | remove PATH\nlearn export FILE | backup FILE | restore FILE\nlearn --smoke [--debug]\n\nCustomization commands accept --json for scripting.\nPDF/OCR, live audio and code execution are deferred.\n`;
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -106,6 +108,17 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "status") { const context = await service.context({}, "cli"); console.log(rest[0] === "--json" ? JSON.stringify(context, null, 2) : formatLearningStatus(context)); return; }
+  if (command === "evaluate") { if (rest.length && rest.join() !== "--json") throw new Error("Usage: learn evaluate [--json]"); console.log(JSON.stringify(evaluateLearning(service.store), null, 2)); return; }
+  if (command === "capabilities") { if (rest.length) throw new Error("Usage: learn capabilities"); console.log(JSON.stringify(service.capabilities.list(), null, 2)); return; }
+  if (command === "artifact") {
+    if (rest[0] === "add" && (rest.length === 3 || rest.length === 4)) { console.log(JSON.stringify(await service.importArtifact(rest[1]!, resolve(rest[2]!), rest[3]), null, 2)); return; }
+    if (rest[0] === "show" && rest.length === 2) { console.log(JSON.stringify(service.store.revision(rest[1]!, "artifact"), null, 2)); return; }
+    if (rest[0] === "export" && rest.length === 3) {
+      const artifact = service.store.revision<Artifact>(rest[1]!, "artifact");
+      await writeFile(resolve(rest[2]!), artifact.body.content, { flag: "wx", mode: 0o600 }); console.log("Artifact exported without overwriting existing files."); return;
+    }
+    throw new Error("Usage: learn artifact add drawing|code|voice_transcript|graph_state FILE [INSTANCE_ID] | show ID | export ID FILE");
+  }
   if (command === "source") { console.log(JSON.stringify(await sourceControl(service, rest.join(" ")), null, 2)); return; }
   if (command === "brain") {
     if (rest[0] === "show") { console.log(await readBrain(paths)); return; }

@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { SatoPaths } from "./paths.ts";
 
 export async function bootstrapSatoHome(paths: SatoPaths): Promise<void> {
@@ -7,7 +8,8 @@ export async function bootstrapSatoHome(paths: SatoPaths): Promise<void> {
     for (const root of Object.values(paths.userResources)) {
       await mkdir(root, { recursive: true });
     }
-    await writeFile(paths.brain, "# Sato\n\nDescribe how you prefer to learn here. This file is yours to edit.\n", { flag: "wx" }).catch((error: unknown) => {
+    const template = await readFile(join(paths.applicationRoot, "brain.md"), "utf8");
+    await writeFile(paths.brain, template, { flag: "wx", mode: 0o600 }).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     });
   } catch (error) {

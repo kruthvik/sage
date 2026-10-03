@@ -3,7 +3,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { CallSchema, DefineSchema, RecordSchema, validate, validTime, type Revision, type RevisionKind, type LearningEvent, type Goal, type TaskDefinition, type TaskInstance, type Rubric, type Attempt, type Assessment, type Assistance, type CallEntry } from "../../core/src/contracts.ts";
-import { projectComponents } from "./projection.ts";
+import { familyKeys, projectComponents } from "./projection.ts";
+import { POLICY_VERSION, PROJECTOR_VERSION } from "../../core/src/learning.ts";
+import type { Artifact, Hypothesis } from "../../core/src/contracts.ts";
 import { verifyLinearEquation } from "../../activities/src/validation.ts";
 
 export const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -24,7 +26,7 @@ export class LearningStore {
     this.db = new Database(filename, { create: true, strict: true });
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
     const version = (this.db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 1) { this.db.close(); throw new Error("Database is newer than this Sato version; upgrade Sato before opening it"); }
+    if (version > 2) { this.db.close(); throw new Error("Database is newer than this Sato version; upgrade Sato before opening it"); }
     this.db.transaction(() => {
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS object_revision (
@@ -59,7 +61,10 @@ export class LearningStore {
           job_id TEXT PRIMARY KEY, idempotency_key TEXT UNIQUE NOT NULL, state TEXT NOT NULL,
           attempts INTEGER NOT NULL DEFAULT 0, error TEXT, body TEXT NOT NULL CHECK(json_valid(body))
         );
-        PRAGMA user_version=1;
+        CREATE INDEX IF NOT EXISTS event_kind_time ON event(kind,occurred_at,seq);
+        CREATE INDEX IF NOT EXISTS event_session ON event(session_id,seq);
+        CREATE INDEX IF NOT EXISTS revision_kind ON object_revision(kind,created_seq);
+        PRAGMA user_version=2;
       `);
       for (const table of ["object_revision", "event", "model_call_log", "blob_manifest", "source_span"]) {
         this.db.exec(`CREATE TRIGGER IF NOT EXISTS ${table}_immutable_update BEFORE UPDATE ON ${table} BEGIN SELECT RAISE(ABORT, 'Immutable record'); END;
@@ -129,6 +134,11 @@ export class LearningStore {
       this.insertRevision(revisionId, input.entity_id ?? randomUUID(), input.kind, input.parent_revision_id ?? null, input.body, created.seq, input.operation_id, rawInput);
       if (input.kind === "task_instance") {
         this.append("task_delivered", { instance_revision_id: revisionId }, `deliver:${input.operation_id}`, actor, sessionId);
+        const task = this.revision<TaskDefinition>(input.body.definition_revision_id as string).body;
+        for (const ref of task.artifact_revision_ids ?? []) {
+          const artifact = this.revision<Artifact>(ref, "artifact").body;
+          if (artifact.author !== "learner") this.append("assistance", { assistance_id: `task-artifact:${revisionId}:${ref}`, instance_revision_id: revisionId, component_revision_ids: task.component_revision_ids, stage: "possibly_exposed", kind: "example", content: `Supplied ${artifact.author} artifact ${ref}; support content not automatically independent evidence`, answer_bearing: true }, `task-artifact:${revisionId}:${ref}`, "host", sessionId);
+        }
       }
       this.rebuild();
       return this.revision(revisionId);
@@ -136,7 +146,7 @@ export class LearningStore {
   }
   insertRevision(revisionId: string, entityId: string, kind: RevisionKind, parent: string | null, body: Record<string, unknown>, seq: number, operationId: string, command: unknown): void {
     const encoded = canonical(body);
-    this.db.query("INSERT INTO object_revision(revision_id,entity_id,kind,parent_revision_id,body,content_hash,created_at,created_seq,operation_id,command_hash) VALUES(?,?,?,?,?,?,?,?,?,?)").run(revisionId, entityId, kind, parent, encoded, hash(encoded), this.now(), seq, operationId, hash(canonical(command)));
+    this.db.query("INSERT INTO object_revision(revision_id,entity_id,kind,parent_revision_id,body,content_hash,created_at,created_seq,operation_id,command_hash,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,2)").run(revisionId, entityId, kind, parent, encoded, hash(encoded), this.now(), seq, operationId, hash(canonical(command)));
   }
   private validateDefinition(kind: RevisionKind, body: Record<string, unknown>, actor: string): void {
     const refs = (key: string, refKind: RevisionKind) => { for (const ref of (body[key] as string[] | undefined) ?? []) this.revision(ref, refKind); };
@@ -145,9 +155,42 @@ export class LearningStore {
       if (actor === "pi" && (!current || body.provider_sharing !== current.body.provider_sharing || canonical(body.source_ids) !== canonical(current.body.source_ids))) throw new Error("Provider consent and source selection require learner controls");
       if (body.deadline) validTime(body.deadline as string);
       for (const source of body.source_ids as string[]) this.revision(source, "source");
+      const weights = (body as unknown as Goal).exam?.topic_weights ?? [];
+      for (const weight of weights) this.revision(weight.component_revision_id, "component");
+      if (new Set(weights.map(w => w.component_revision_id)).size !== weights.length) throw new Error("Exam topic weights must be unique");
     }
     if (kind === "component") { refs("concept_revision_ids", "concept"); refs("prerequisite_revision_ids", "component"); }
-    if (kind === "task_family") refs("lineage_revision_ids", "task_family");
+    if (kind === "task_family") {
+      refs("lineage_revision_ids", "task_family"); refs("component_revision_ids", "component"); refs("concept_revision_ids", "concept"); refs("prerequisite_revision_ids", "component");
+      for (const span of (body.source_span_ids as string[] | undefined) ?? []) this.acceptedSpan(span);
+    }
+    if (kind === "hypothesis") {
+      const h = body as unknown as Hypothesis;
+      refs("component_revision_ids", "component"); refs("competing_hypothesis_revision_ids", "hypothesis");
+      if (h.prerequisite_component_revision_id) this.revision(h.prerequisite_component_revision_id, "component");
+      const first = validTime(h.first_observed_at), last = validTime(h.last_observed_at);
+      if (first > last || last > this.now()) throw new Error("Invalid hypothesis observation interval");
+      if (h.supporting_evidence_ids.some(id => h.contradicting_evidence_ids.includes(id))) throw new Error("Evidence cannot both support and contradict the same hypothesis revision");
+      for (const id of [...h.supporting_evidence_ids, ...h.contradicting_evidence_ids]) {
+        const evidence = this.event<Assessment>(id, "assessment");
+        const attempt = this.findAttempt(evidence.payload.attempt_id);
+        const task = this.revision<TaskDefinition>(this.revision<TaskInstance>(attempt.payload.instance_revision_id).body.definition_revision_id).body;
+        if (evidence.branch !== "real" || evidence.payload.outcome === "not_observed" || !task.component_revision_ids.some(c => h.component_revision_ids.includes(c) || c === h.prerequisite_component_revision_id)) throw new Error("Hypothesis evidence is not a relevant observed assessment");
+      }
+      if (h.status === "resolved" && !h.contradicting_evidence_ids.length) throw new Error("Resolution requires contradictory evidence, not an unsupported label");
+    }
+    if (kind === "artifact") {
+      const artifact = body as unknown as Artifact;
+      if (artifact.goal_revision_id) this.revision(artifact.goal_revision_id, "goal");
+      if (artifact.instance_revision_id) this.revision(artifact.instance_revision_id, "task_instance");
+      for (const ref of artifact.assistance_event_ids) this.event(ref, "assistance");
+      if (actor === "pi" && (artifact.author === "learner" || artifact.evidence_kind === "direct")) throw new Error("Pi cannot claim learner authorship or direct modality evidence");
+      if (artifact.author === "learner") {
+        if (actor !== "learner" || !artifact.response_event_id) throw new Error("Learner artifacts require a captured learner submission");
+        this.event(artifact.response_event_id, "learner_response");
+      }
+      if (artifact.author !== "learner" && artifact.evidence_kind === "direct") throw new Error("Non-learner artifact is not direct learner evidence");
+    }
     if (kind === "plan") { this.revision(body.goal_revision_id as string, "goal"); refs("component_revision_ids", "component"); }
     if (kind === "rubric" || kind === "task_definition") {
       for (const span of body.source_span_ids as string[]) this.acceptedSpan(span);
@@ -159,6 +202,11 @@ export class LearningStore {
     if (kind === "task_definition") {
       const task = body as unknown as TaskDefinition;
       this.revision(task.family_revision_id, "task_family"); this.revision(task.rubric_revision_id, "rubric"); refs("component_revision_ids", "component");
+      refs("artifact_revision_ids", "artifact");
+      if (task.variation) {
+        const baseline = this.revision<TaskDefinition>(task.variation.baseline_definition_revision_id, "task_definition");
+        if (!baseline.body.component_revision_ids.some(c => task.component_revision_ids.includes(c))) throw new Error("Variation baseline must share a targeted component");
+      }
       if (task.scoring !== "rubric" && !task.answer) throw new Error("Objective scoring requires an answer");
       if (task.scoring === "numeric" && (!Number.isFinite(Number(task.answer)) || task.answer?.trim() === "")) throw new Error("Numeric key must be a finite number");
       if (task.status === "practice_ready" && task.review.method === "unreviewed") throw new Error("Review is required before practice");
@@ -194,6 +242,7 @@ export class LearningStore {
           return this.revision(row.source_revision_id, "source").entity_id;
         }));
         const protectedFamilies = familyEntities(task.body.family_revision_id);
+        const familyGroups = familyKeys(this, this.throughSeq);
         const protectedSources = sourceEntities(task.body.source_span_ids);
         const knownSources = this.revisions("goal").flatMap(goal => goal.body.source_ids as string[]).map(id => this.revision(id, "source").entity_id);
         if (knownSources.some(id => protectedSources.has(id))) throw new Error("Learner already selected this assessment source; cannot claim an unseen source");
@@ -203,7 +252,7 @@ export class LearningStore {
           const def = this.revision<TaskDefinition>(prior.body.definition_revision_id).body;
           const priorFamilies = familyEntities(def.family_revision_id);
           const priorSources = sourceEntities(def.source_span_ids);
-          if ([...priorFamilies].some(id => protectedFamilies.has(id)) || [...priorSources].some(id => protectedSources.has(id))) throw new Error("Protected assessment overlaps a delivered family/source; cannot claim independent transfer");
+          if (familyGroups.get(def.family_revision_id) === familyGroups.get(task.body.family_revision_id) || [...priorFamilies].some(id => protectedFamilies.has(id)) || [...priorSources].some(id => protectedSources.has(id))) throw new Error("Protected assessment overlaps a delivered family/source; cannot claim independent transfer");
         }
       }
     }
@@ -243,7 +292,11 @@ export class LearningStore {
       }
       if (input.kind === "step_attempt") {
         const attempt = this.findAttempt(payload.attempt_id as string);
-        this.event(payload.response_event_id as string, "learner_response");
+        const response = this.event<{ text: string }>(payload.response_event_id as string, "learner_response");
+        if (response.session_id !== sessionId || attempt.session_id !== sessionId || response.seq < this.event(attempt.payload.response_event_id).seq) throw new Error("Step response must follow its attempt in the same conversation");
+        if (this.events().some(e => e.kind === "step_attempt" && e.payload.response_event_id === response.event_id)) throw new Error("Step response already recorded");
+        payload.response = response.payload.text;
+        occurred = response.occurred_at;
         for (const id of payload.prior_step_ids as string[]) if (!this.events().some(e => e.kind === "step_attempt" && e.payload.step_attempt_id === id && e.payload.attempt_id === attempt.payload.attempt_id)) throw new Error("Invalid dependent step");
         if (this.events().some(e => e.kind === "step_attempt" && e.payload.step_attempt_id === payload.step_attempt_id)) throw new Error("Step already exists");
       }
@@ -257,7 +310,7 @@ export class LearningStore {
         if (help.step_attempt_id && !this.events().some(e => e.kind === "step_attempt" && e.payload.step_attempt_id === help.step_attempt_id && e.payload.attempt_id === help.attempt_id)) throw new Error("Assistance step scope mismatch");
         const stages = this.events().filter(e => e.kind === "assistance" && e.payload.assistance_id === help.assistance_id);
         if (stages.some(e => e.payload.stage === help.stage)) throw new Error("Assistance stage already recorded");
-        if (stages.some(e => e.payload.instance_revision_id !== help.instance_revision_id || e.payload.content !== help.content || e.payload.answer_bearing !== help.answer_bearing)) throw new Error("Assistance lifecycle content/scope cannot change");
+        if (stages.some(e => e.payload.instance_revision_id !== help.instance_revision_id || e.payload.content !== help.content || e.payload.answer_bearing !== help.answer_bearing || e.payload.kind !== help.kind || e.payload.attempt_id !== help.attempt_id || e.payload.step_attempt_id !== help.step_attempt_id || canonical(e.payload.component_revision_ids) !== canonical(help.component_revision_ids))) throw new Error("Assistance lifecycle content/scope cannot change");
       }
       if (input.kind === "assessment") {
         const assessment = payload as unknown as Assessment;
@@ -267,10 +320,20 @@ export class LearningStore {
         if (task.rubric_revision_id !== assessment.rubric_revision_id) throw new Error("Assessment must pin the delivered rubric");
         if (assessment.step_attempt_id && !this.events().some(e => e.kind === "step_attempt" && e.payload.step_attempt_id === assessment.step_attempt_id && e.payload.attempt_id === assessment.attempt_id)) throw new Error("Invalid step assessment");
         const rubric = this.revision<Rubric>(assessment.rubric_revision_id, "rubric").body;
+        const step = assessment.step_attempt_id ? this.events().find(e => e.kind === "step_attempt" && e.payload.step_attempt_id === assessment.step_attempt_id) : undefined;
+        const scoredText = step ? this.event<{ text: string }>(step.payload.response_event_id as string, "learner_response").payload.text : attempt.payload.response;
+        const componentOutcomes = assessment.component_outcomes ?? [];
+        if (new Set(componentOutcomes.map(c => c.component_revision_id)).size !== componentOutcomes.length || componentOutcomes.some(c => !task.component_revision_ids.includes(c.component_revision_id))) throw new Error("Component outcomes must be unique and targeted by the task");
+        const claims = assessment.claims ?? [];
+        if (new Set(claims.map(c => `${c.component_revision_id}:${c.dimension}`)).size !== claims.length) throw new Error("Duplicate component dimension claim");
+        for (const claim of claims) {
+          if (!task.component_revision_ids.includes(claim.component_revision_id) || !scoredText.includes(claim.evidence)) throw new Error("Dimension claim requires a targeted component and actual response quote");
+          if (task.scoring !== "rubric" && claim.dimension !== "execution") throw new Error("Objective answer matching cannot establish explanation, discrimination or fluency");
+        }
         for (const score of assessment.scores) {
           const dim = rubric.dimensions.find(d => d.name === score.dimension);
           if (!dim || score.score > dim.max_score) throw new Error("Score does not match rubric bounds");
-          if (task.scoring === "rubric" && !attempt.payload.response.includes(score.evidence)) throw new Error("Rubric evidence must quote an actual span of the learner response");
+          if (task.scoring === "rubric" && !scoredText.includes(score.evidence)) throw new Error("Rubric evidence must quote an actual span of the learner response");
         }
         if (new Set(assessment.scores.map(s => s.dimension)).size !== assessment.scores.length) throw new Error("Duplicate scoring dimension");
         if (task.scoring === "rubric" && assessment.outcome === "success" && assessment.scores.length !== rubric.dimensions.length) throw new Error("A successful holistic assessment requires evidence for every rubric dimension");
@@ -285,18 +348,30 @@ export class LearningStore {
           payload.assessor = "deterministic";
           payload.scores = rubric.dimensions.map(d => ({ dimension: d.name, score: success ? d.max_score : 0, evidence: response }));
           payload.uncertainty = "Objective response match only; reasoning is not established by this score.";
+          if (assessment.component_outcomes) payload.component_outcomes = componentOutcomes.map(c => ({ ...c, outcome: payload.outcome }));
+          if (assessment.claims) payload.claims = claims.map(c => ({ ...c, outcome: payload.outcome }));
         } else payload.assessor = "pi_rubric_proposal";
       }
       if (input.kind === "review_scheduled") {
         this.revision(payload.component_revision_id as string, "component");
         payload.due_at = validTime(payload.due_at as string);
         if (!payload.consent) throw new Error("Review scheduling requires learner consent");
-        this.event(payload.consent_response_event_id as string, "learner_response");
+        const consent = this.event(payload.consent_response_event_id as string, "learner_response");
+        if (consent.session_id !== sessionId) throw new Error("Review consent must come from this conversation");
+        if (payload.due_at as string <= this.now()) throw new Error("Offer a future review date; do not backdate consent");
       }
       if (input.kind === "checkpoint") {
         if (payload.goal_revision_id !== input.expected_goal_revision_id) throw new Error("Checkpoint goal mismatch");
       }
-      if (input.kind === "decision") for (const ref of payload.evidence_event_ids as string[]) this.event(ref);
+      if (input.kind === "decision") {
+        payload.policy_version ??= POLICY_VERSION;
+        payload.reason_codes ??= ["explicit_tutor_reason"];
+        payload.uncertainty ??= "unknown";
+        for (const ref of payload.evidence_event_ids as string[]) this.event(ref);
+        for (const ref of (payload.target_component_revision_ids as string[] | undefined) ?? []) this.revision(ref, "component");
+        if (payload.selected_candidate_id && !(payload.candidate_ids as string[] | undefined)?.includes(payload.selected_candidate_id as string)) throw new Error("Selected candidate must appear among considered candidates");
+        if (payload.model_call_id && !this.db.query("SELECT 1 FROM model_call_log WHERE call_id=? AND phase='started'").get(payload.model_call_id as string)) throw new Error("Decision model call association was not observed");
+      }
       if (input.kind === "review_completed") {
         const schedule = this.event(payload.schedule_event_id as string, "review_scheduled");
         const assessment = this.event<Assessment>(payload.assessment_event_id as string, "assessment");
@@ -321,7 +396,7 @@ export class LearningStore {
     if (!e) throw new Error(`Missing attempt: ${attemptId}`);
     return e as unknown as LearningEvent<Attempt & { response: string }>;
   }
-  learnerResponse(text: string, sessionId: string, operationId = randomUUID()): LearningEvent {
+  learnerResponse(text: string, sessionId: string, operationId: string = randomUUID()): LearningEvent {
     if (!text.trim() || text.length > 24000) throw new Error("Response must contain 1–24000 characters");
     return this.append("learner_response", { text }, operationId, "learner", sessionId);
   }
@@ -332,7 +407,7 @@ export class LearningStore {
   }
   rebuild(asOfTime = this.events().at(-1)?.recorded_at ?? "1970-01-01T00:00:00.000Z"): void {
     const projection = projectComponents(this, this.throughSeq, validTime(asOfTime));
-    this.db.query("INSERT INTO projection(key,through_seq,as_of_time,version,body) VALUES('components',?,?,?,?) ON CONFLICT(key) DO UPDATE SET through_seq=excluded.through_seq,as_of_time=excluded.as_of_time,version=excluded.version,body=excluded.body").run(this.throughSeq, asOfTime, "1", canonical(projection));
+    this.db.query("INSERT INTO projection(key,through_seq,as_of_time,version,body) VALUES('components',?,?,?,?) ON CONFLICT(key) DO UPDATE SET through_seq=excluded.through_seq,as_of_time=excluded.as_of_time,version=excluded.version,body=excluded.body").run(this.throughSeq, asOfTime, PROJECTOR_VERSION, canonical(projection));
   }
   integrity(): string[] { return this.db.query("PRAGMA integrity_check").all().map(row => String((row as Record<string, unknown>).integrity_check)); }
   close(): void { this.db.close(); }

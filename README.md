@@ -28,7 +28,7 @@ Inside the native Pi terminal:
 
 Start with what you want to learn, then one optional note about time, a deadline or preferences. No subject picker or planning questionnaire. A Pi planning subagent infers the subject and prepares a small, provisional starting outline; the tutor begins teaching from it. You can correct the plan at any time. An opening check is optional, not a gate; skipping it leaves knowledge unknown. `/exam` also covers essays, interviews, speeches and practical tasks. The learner decides when to stop.
 
-Live tutoring requires a Pi-compatible provider. After intake consent, conversation, relevant learning records, up to 6,000 characters of `brain.md`, and selected source excerpts may go to that provider. Educational records and originals stay local. Pi install telemetry defaults to disabled in Sato settings; native Pi catalog/version/package checks can still contact Pi services. Explicit telemetry settings/environment flags retain Pi behavior.
+Live tutoring requires a Pi-compatible provider. After intake consent, conversation, relevant learning records, up to 1,800 characters of `brain.md` per context packet, and selected source excerpts may go to that provider. Educational records and originals stay local. Pi install telemetry defaults to disabled in Sato settings; native Pi catalog/version/package checks can still contact Pi services. Explicit telemetry settings/environment flags retain Pi behavior.
 
 For a working lesson without credentials or model requests:
 
@@ -58,6 +58,10 @@ Sato does not copy normal Pi credentials or discover invocation `.pi` resources/
 Pi chooses small instructional moves from scoped evidence: explain unfamiliar work, repair an observed gap, seek independent work after help, fade redundant guidance and sample a useful different form. Planning is delegated at intake and for consequential replanning, not after every answer. The child uses the selected Pi model/auth runtime, one request (up to 4,096 output tokens), a 60-second cancellation deadline, and only explicitly supplied bounded facts. It has no tools, user extensions or ambient context. Plans use the existing goal/component/outline ledger; no parallel tutor or new database is introduced. The host formats facts and validates records without generating educational judgments. Seven profiles cover math, writing, science, humanities, languages, computing and practical/creative work. Curated fixtures are teaching examples, not calibrated assessments. Text cannot verify pronunciation, physical performance or laboratory execution.
 
 No global mastery score, learning-style label or fitted forgetting curve is presented as measured knowledge. Reviews require a learner-consent response and date; no unattended reminder/model loop runs.
+
+The tracked [brain.md](brain.md) is a blank boilerplate copied only into new homes. `learn brain edit` edits your private copy; existing notes are never overwritten. Personal home copies remain ignored by Git.
+
+The v2 engine adds distinct component evidence dimensions, revisioned competing error hypotheses, family/representation exposure, guidance fading, transparent review offers and up to five deterministic next-action candidates. Pi chooses what to teach; Bun provides facts and validates writes. Normal context is bounded to 16,000 characters with ID-based drill-down. [Learning-engine details](docs/LEARNING-ENGINE.md) explain the policy, assistance semantics, integrations, extension interfaces and evaluation limits.
 
 ## Sources and practice
 
@@ -96,6 +100,10 @@ learn update                  # Update Pi in Sato only
 learn update --extensions --trust
 learn doctor
 learn status                  # --json gives a detailed context packet
+learn evaluate                # Descriptive local learning outcomes, not causal efficacy
+learn capabilities            # Available tools and explicit limits
+learn artifact add drawing diagram.excalidraw TASK_INSTANCE_ID
+learn artifact export ARTIFACT_ID graph.svg
 learn brain show
 learn brain edit              # EDITOR executable; Notepad by default on Windows
 learn export private-records.json
@@ -143,4 +151,4 @@ Tests cover actual Pi SDK startup/isolation, extension execution and native pack
 
 Before publishing a staged change, run `bun run check:publication`. It checks staged files for private runtime paths, user-home paths and common credential patterns without printing their contents. Session transcripts, learning databases, learner preferences, credentials, local settings and interim agent plans/drafts are excluded by `.gitignore`. This is a guardrail, not a guarantee that arbitrary text contains no secrets; review anything personal before adding it to Git.
 
-PDF/OCR, audio, executable simulations, protected-bank administration, automatic large practice banks, learned scheduling, irreversible privacy purge, `/accelerate` and standalone `/drill` remain deferred. See [architecture](docs/ARCHITECTURE.md) and [implementation record](docs/IMPLEMENTATION.md).
+Bounded arithmetic, local sampled SVG graphing, Excalidraw-file validation and provenance-bearing artifact import/export are implemented; these are not live external-app controls or automatic modality scoring. PDF/OCR, voice delivery, sandboxed code execution, symbolic CAS, live Desmos/whiteboards, vault synchronization, protected-bank administration, automatic large banks, learned scheduling, irreversible privacy purge, `/accelerate` and standalone `/drill` remain deferred. See [learning engine](docs/LEARNING-ENGINE.md), [architecture](docs/ARCHITECTURE.md) and [implementation record](docs/IMPLEMENTATION.md).

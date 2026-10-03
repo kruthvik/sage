@@ -33,7 +33,7 @@ export async function restore(paths: SatoPaths, filename: string): Promise<void>
   if (bytes.length < 100 || bytes.subarray(0, 16).toString() !== "SQLite format 3\0") throw new Error("Invalid SQLite image");
   const check = Database.deserialize(bytes);
   try {
-    if ((check.query("PRAGMA user_version").get() as { user_version: number }).user_version !== 1) throw new Error("Unsupported backup schema");
+    if (![1, 2].includes((check.query("PRAGMA user_version").get() as { user_version: number }).user_version)) throw new Error("Unsupported backup schema");
     const tables = check.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(t => t.name);
     if (tables.join(",") !== "blob_manifest,event,job,model_call_log,object_revision,projection,source_span") throw new Error("Backup table set is invalid");
     if ((check.query("PRAGMA integrity_check").get() as { integrity_check: string }).integrity_check !== "ok" || check.query("PRAGMA foreign_key_check").all().length) throw new Error("Backup database integrity failed");

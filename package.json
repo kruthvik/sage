@@ -7,7 +7,7 @@
   "bin": {
     "learn": "apps/cli/src/index.ts"
   },
-  "files": ["apps/", "packages/", "resources/", "docs/", "scripts/", "README.md", "LICENSE"],
+  "files": ["apps/", "packages/", "resources/", "docs/", "scripts/", "README.md", "brain.md", "LICENSE"],
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bun apps/cli/src/index.ts",

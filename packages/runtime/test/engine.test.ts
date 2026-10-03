@@ -92,6 +92,8 @@ test("CLI initializes, diagnoses, exports, demos and reports provider-independen
   expect((await invoke("init")).code).toBe(0);
   expect((await invoke("doctor")).stdout).toContain('"sqlite": [');
   expect((await invoke("status")).code).toBe(0);
+  const capabilities = await invoke("capabilities"); expect(capabilities.code).toBe(0); expect(capabilities.stdout).toContain('"name": "calculator"'); expect(capabilities.stdout).toContain('"status": "unavailable"');
+  const evaluation = await invoke("evaluate", "--json"); expect(evaluation.code).toBe(0); expect(JSON.parse(evaluation.stdout).components).toEqual([]);
   const demo = await invoke("demo", "--answers", "5,7,9"); expect(demo.code).toBe(0); expect(demo.stdout).toContain("3/3 numerical matches");
   const file = join(root, "export.json"); expect((await invoke("export", file)).code).toBe(0); expect(JSON.parse(await readFile(file, "utf8")).format).toBe("sato-private-export-v1");
   expect((await invoke("unknown-command")).code).toBe(1);

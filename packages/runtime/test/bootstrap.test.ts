@@ -16,6 +16,7 @@ test("creates only user-owned bootstrap files and resource roots", async () => {
   expect((await readdir(paths.home)).sort()).toEqual(["agent", "brain.md", "sessions"]);
   expect((await readdir(paths.agent)).sort()).toEqual(["extensions", "prompts", "skills", "themes"]);
   expect(await readFile(paths.brain, "utf8")).toContain("Sato");
+  expect(await readFile(paths.brain, "utf8")).toBe(await readFile(join(paths.applicationRoot, "brain.md"), "utf8"));
   await writeFile(paths.brain, "My own instructions\n");
   await bootstrapSatoHome(paths);
   expect(await readFile(paths.brain, "utf8")).toBe("My own instructions\n");
