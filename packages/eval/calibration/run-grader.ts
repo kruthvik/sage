@@ -2,11 +2,9 @@
 // Reports A1–A10 (owner-scored, final) and C01–C20 (Claude-written, UNREVIEWED) separately; only A1–A10 is a gate until the owner confirms C.
 // Credentials: Sage's own agent dir by default. SAGE_EVAL_AGENT_DIR=<dir> is an explicit dev opt-in to read another pi agent dir
 // (e.g. ~/.pi/agent) in place; nothing is copied. Extension providers from that dir's settings load only for the requested provider.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
-import { createSageRuntime } from "../../pi-adapter/src/runtime.ts";
-import { sagePaths } from "../../core/src/paths.ts";
+import { evalRuntime } from "../src/eval-runtime.ts";
 import { GRADER_SYSTEM, graderUser, parseGrade } from "../../agent/src/grader.ts";
 import { validateGrade } from "../../engine/src/evidence.ts";
 import { ANCHORS, GENERATED, calibrate, type Triple } from "./set.ts";
@@ -17,15 +15,7 @@ const [provider, model] = spec?.split("/") ?? [];
 if (!provider || !model) { console.error("usage: run-grader.ts <provider>/<model> [repeats]"); process.exit(2); }
 const repeats = Math.max(1, Number(repeatsArg ?? 1));
 
-const agentDir = process.env.SAGE_EVAL_AGENT_DIR?.replace(/^~/, homedir());
-let packages: (string | { source: string; extensions?: string[] })[] = [];
-if (agentDir) {
-  try {
-    const all = (JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8")).packages ?? []) as typeof packages;
-    packages = all.filter(p => (typeof p === "string" ? p : p.source).includes(provider)); // only the package that provides this provider
-  } catch { /* no settings: builtin providers only */ }
-}
-const rt = await createSageRuntime({ paths: sagePaths(process.env.SAGE_HOME ?? join(homedir(), ".sage")), agentDir, packages });
+const rt = await evalRuntime([provider]);
 
 interface Row { id: string; target: number; scores: number[]; problems: string[]; error?: string; inTok: number; outTok: number; cost: number | "unknown"; ms: number }
 async function gradeOne(t: Triple): Promise<Row> {

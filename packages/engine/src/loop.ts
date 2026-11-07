@@ -147,7 +147,7 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       if (s.pendingAttemptId) fail("a grade is already pending");
       if (!ev.argument.trim()) fail("say why the grade is wrong");
       s.disputed.add(a.id); s.pendingAttemptId = a.id; s.phase = "grading";
-      fx.push({ kind: "call_role", role: "grader", purpose: "dispute", input: { item: s.items.get(a.itemId), response: a.response, previous: a.grade, argument: ev.argument } });
+      fx.push({ kind: "call_role", role: "grader", purpose: "dispute", input: { attemptId: a.id, item: s.items.get(a.itemId), response: a.response, previous: a.grade, argument: ev.argument } });
       return;
     }
     case "move_selected": {
@@ -324,7 +324,7 @@ function submit(s: EngineState, ev: Extract<EngineEvent, { type: "response_submi
   const g = a.isRepair ? undefined : gradeDeterministic(item, ev.input);
   if (g) return applyGrade(s, a, g, now, fx, false);
   s.pendingAttemptId = a.id; s.phase = "grading";
-  fx.push({ kind: "call_role", role: "grader", purpose: a.isRepair ? "repair" : "grade", input: { item, response: text, assistance: a.assistance.map(x => x.kind), cueLevel: a.cueLevel, rigor: s.goal.preview.feedbackRigor } });
+  fx.push({ kind: "call_role", role: "grader", purpose: a.isRepair ? "repair" : "grade", input: { attemptId: a.id, item, response: text, assistance: a.assistance.map(x => x.kind), cueLevel: a.cueLevel, rigor: s.goal.preview.feedbackRigor } });
 }
 
 function applyGrade(s: EngineState, a: Attempt, g: Grade, now: string, fx: Effect[], supersede: boolean): void {
