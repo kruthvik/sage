@@ -6,3 +6,4 @@ export * from "./candidates.ts";
 export * from "./pacing.ts";
 export * from "./scheduler.ts";
 export * as pedagogy from "./pedagogy.config.ts";
+export * from "./metrics.ts";

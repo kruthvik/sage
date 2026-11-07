@@ -28,7 +28,10 @@ export const REVIEW_FIRST_DAYS = 2;                // ED-20, RM-14 (owner chose 
 export const HIGH_OPEN_HYPOTHESIS_BLOCKS = true;   // ED-21
 export const DIGEST_TOKENS = 120;                  // ED-22
 export const FEEDBACK_WORDS = 60;                  // ED-24
-export const DEDUCTION = { precision: 5, polish: 1 } as const; // ED-25 (owner, M2 batch): points per flaw, applied by the grader rubric
+// ED-25 (owner reply 2): deductions apply only to a met criterion worded imprecisely; partly met criteria get partial credit instead.
+export const DEDUCTION = { precision: 7, precisionRange: [5, 10], polish: 1, polishRange: [0, 2], polishCap: 4 } as const;
+export const CALIBRATION = { maxMae: 8, maxMeanSignedError: 3, lenientCeiling: { target: 85, score: 95 } } as const; // §18.4 + owner reply 2
+export const RESEARCH = { maxSearches: 6, maxFetches: 6, maxOutputTokens: 4096 } as const; // ED-28
 export const REPEATED_FAILURE_ESCALATION = 2;      // ED-26, RM-16
 export const MAX_CUE_LEVEL = 3;                    // ED-27, RM-04
 

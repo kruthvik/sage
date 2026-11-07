@@ -1,11 +1,11 @@
 // The node loop (SPEC §9) as a pure reducer: (state, event, now, actor) → { state, effects }. No I/O, no clock, no randomness.
-import type { Attempt, Candidate, Grade, Item, Plan, PlanNode, ResponseInput, SessionState } from "../../core/src/types.ts";
+import type { Attempt, Candidate, Grade, Item, Plan, PlanNode, ResponseInput, SessionState, SourcePack } from "../../core/src/types.ts";
 import { activeNode, gates, nextCandidates, subskill, view } from "./candidates.ts";
 import { gate, validateGrade, coverageDebt } from "./evidence.ts";
 import { fingerprint, gradeDeterministic, leaksKey, passed, validateItem } from "./items.ts";
 import { accrue, paceNotice, usedMin } from "./pacing.ts";
 import {
-  BANK_SIZE, CHUNK_WORDS, DIAGNOSTIC, DIGEST_TOKENS, MAX_CUE_LEVEL, NODE_CHECK_SIZE, NODE_CHECK_SIZE_SPEED_UP, NODE_CHECK_THIS_NODE_SHARE,
+  BANK_SIZE, CHUNK_WORDS, RESEARCH, DIAGNOSTIC, DIGEST_TOKENS, MAX_CUE_LEVEL, NODE_CHECK_SIZE, NODE_CHECK_SIZE_SPEED_UP, NODE_CHECK_THIS_NODE_SHARE,
   POLICY_VERSION, REPAIR_MICRO_MIN, STRUGGLE_FAILURES, STRUGGLE_LATENCY_FACTOR, STRUGGLE_LATENCY_MIN_MS, primeFor, requiredDimensions,
 } from "./pedagogy.config.ts";
 import { addDays, nextIntervalDays } from "./scheduler.ts";
@@ -23,11 +23,11 @@ export interface Step { state: EngineState; effects: Effect[] }
 export function reduce(prev: EngineState, ev: EngineEvent, now: string, actor: Actor): Step {
   if (EVENT_ACTOR[ev.type] !== actor) fail(`${actor} may not emit ${ev.type}`);
   if (ev.type !== "session_created" && !prev.sessionId) fail("no session");
-  if (prev.phase === "ended" && ev.type !== "role_call_logged" && ev.type !== "digest_written" && ev.type !== "reviews_consented") fail("session ended");
+  if (prev.phase === "ended" && ev.type !== "role_call_logged" && ev.type !== "digest_written" && ev.type !== "reviews_consented" && !ev.type.startsWith("research_pack")) fail("session ended");
   const s = structuredClone(prev);
   const fx: Effect[] = [];
   accrue(s, now);
-  if (s.stopped && actor !== "host" && !(ev.type === "control" && ev.action === "resume") && ev.type !== "role_call_logged") fail("session is stopped; resume first");
+  if (s.stopped && actor !== "host" && !(ev.type === "control" && ev.action === "resume") && ev.type !== "role_call_logged" && ev.type !== "research_pack_received") fail("session is stopped; resume first");
   handle(s, ev, now, fx);
   return { state: s, effects: fx };
 }
@@ -42,6 +42,8 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       if ((ev.goal.learnerParams?.length ?? 0) > 2000) fail("learning parameters over 2000 chars");
       s.sessionId = ev.sessionId; s.goal = ev.goal;
       fx.push({ kind: "call_role", role: "planner", purpose: "plan", input: { goal: ev.goal } });
+      if (!ev.goal.sourceIds?.length) research(s, "intake", "intake", { objective: ev.goal.objective }, fx);
+      if (ev.goal.exam?.name) research(s, `exam:${ev.goal.exam.name}`, "exam", { exam: ev.goal.exam }, fx);
       return;
     }
     case "plan_proposed": case "plan_edited": {
@@ -206,6 +208,21 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       s.spend.costUsd = ev.costUsd === undefined || s.spend.costUsd === "unknown" ? "unknown" : s.spend.costUsd + ev.costUsd;
       return;
     }
+    case "research_requested": {
+      const q = ev.question.trim();
+      if (!q || q.length > 300) fail("research question must be 1–300 chars");
+      research(s, `q:${s.activeNodeId}:${q.toLowerCase()}`, "tutor_request", { question: q, nodeId: s.activeNodeId }, fx); // queued, never blocks the lesson
+      return;
+    }
+    case "research_pack_received": return acceptPack(s, ev, fx);
+    case "research_pack_accepted": {
+      const p = s.packs.get(ev.packId) ?? fail("unknown pack");
+      const ids = ev.itemIds ?? p.items.map(i => i.id);
+      if (ids.some(id => !p.items.some(i => i.id === id))) fail("unknown pack item");
+      p.acceptedItemIds = [...new Set([...p.acceptedItemIds, ...ids])];
+      p.status = p.acceptedItemIds.length === p.items.length ? "accepted" : "partially_accepted";
+      return;
+    }
     case "tick": return;
   }
 }
@@ -298,7 +315,7 @@ function submit(s: EngineState, ev: Extract<EngineEvent, { type: "response_submi
     const answerBearing = cur.assistance.some(x => x.answerBearing);
     a = {
       id: `a${s.attempts.length + 1}`, itemId: cur.itemId, responseEventId: ev.responseEventId, response: text, at: now,
-      assistance: cur.assistance, isRepair: false, cueLevel: cur.cueLevel, latencyMs: ev.latencyMs, diagnostic: cur.mode === "diagnostic",
+      assistance: cur.assistance, isRepair: false, cueLevel: cur.cueLevel, latencyMs: ev.latencyMs, diagnostic: cur.mode === "diagnostic", check: cur.mode === "node_check" || cur.mode === "final" ? cur.mode : undefined,
       independent: !cur.prime && cur.cueLevel === 0 && !answerBearing && !cur.familyExposedBefore,
     };
   }
@@ -441,7 +458,7 @@ function advanceCheck(s: EngineState, now: string, fx: Effect[]): void {
   }
   const node = s.plan!.nodes.find(x => x.id === c.nodeId)!;
   if (failed.some(i => i.nodeId === c.nodeId)) { log(s, now, "node_check", "failed; back to practice"); return toAdapt(s, now, fx); }
-  node.status = "passed";
+  node.status = "passed"; node.passedAtMin = usedMin(s);
   for (const x of node.subskills) if (!s.reviews.some(r => r.subskillId === x.id)) {
     const days = nextIntervalDays(undefined, undefined, s.goal.horizonDays);
     s.reviews.push({ subskillId: x.id, intervalDays: days, dueAt: addDays(now, days), consented: false });
@@ -476,10 +493,12 @@ function startNextNode(s: EngineState, now: string, fx: Effect[]): void {
   const repairing = next.status === "needs_repair";
   next.status = "active"; s.activeNodeId = next.id;
   fx.push({ kind: "node_status", nodeId: next.id, status: "active" });
+  if (next.knowledgeConfidence === "low") research(s, `node:${next.id}:low`, "low_confidence", { node: next }, fx);
+  else if (s.goal.sourceIds?.length && !next.sourceIds?.length) research(s, `node:${next.id}:uncovered`, "node_uncovered", { node: next }, fx);
   // A node bank always has an assessment partition; diagnostic items alone don't count as a bank.
   if (repairing || [...s.items.values()].some(i => i.nodeId === next.id && i.partition === "assessment")) return toAdapt(s, now, fx);
   s.phase = "bank";
-  fx.push({ kind: "call_role", role: "generator", purpose: "node", input: { node: next, size: BANK_SIZE, exam: s.goal.exam, mode: s.goal.mode } });
+  fx.push({ kind: "call_role", role: "generator", purpose: "node", input: { node: next, size: BANK_SIZE, exam: s.goal.exam, mode: s.goal.mode, sources: sourcesFor(s, next.id) } });
 }
 
 function endSession(s: EngineState, now: string, fx: Effect[]) {
@@ -539,4 +558,33 @@ export function sessionState(s: EngineState): SessionState {
     candidates: s.candidates, nextIntendedMove: s.nextIntendedMove, timeUsedMin: Math.round(usedMin(s)), timeBudgetMin: s.goal?.timeBudgetMin,
     nodesPassed: s.plan?.nodes.filter(n => DONE.has(n.status)).length ?? 0, nodesTotal: s.plan?.nodes.length ?? 0, spend: s.spend,
   };
+}
+
+/** Queue the researcher in the background, once per trigger key (results are cached per topic/node). Never changes the phase. */
+function research(s: EngineState, key: string, trigger: SourcePack["trigger"], input: Record<string, unknown>, fx: Effect[]) {
+  if (s.researchKeys.has(key)) return;
+  s.researchKeys.add(key);
+  fx.push({ kind: "call_role", role: "researcher", purpose: trigger, background: true, input: { ...input, trigger, learnerSourceIds: s.goal.sourceIds ?? [], limits: RESEARCH } });
+}
+
+function acceptPack(s: EngineState, ev: Extract<EngineEvent, { type: "research_pack_received" }>, fx: Effect[]) {
+  const p = ev.pack;
+  if (s.packs.has(p.id)) fail("duplicate pack");
+  for (const i of p.items) {
+    if (!i.id || !i.title?.trim() || !i.relevance?.trim() || !Array.isArray(i.spans) || !i.reliability?.trim()) fail(`pack item ${i.id ?? "?"} is incomplete`);
+    if (!i.unsourced && !i.url && !i.citation) fail(`pack item ${i.id} has no URL or citation; mark it unsourced`);
+    if (i.nodeId && !s.plan?.nodes.some(n => n.id === i.nodeId)) fail(`pack item ${i.id} names an unknown node`);
+  }
+  // Auto-accept is the learner's own preview toggle, so acceptance still traces to the learner (F10).
+  const auto = !!s.goal.preview.toggles.autoAcceptResearch;
+  s.packs.set(p.id, { ...p, status: auto ? "accepted" : "pending", acceptedItemIds: auto ? p.items.map(i => i.id) : [] });
+  const conflicts = p.items.filter(i => i.conflictsWithSourceId).length;
+  fx.push({ kind: "notice", code: "research_ready", text: `${p.items.length} sources found${conflicts ? `; ${conflicts} conflict with your material (yours stays primary)` : ""}${auto ? " and added" : ". Review to accept"}.` });
+}
+
+/** Sources for a node: the learner's own first, then accepted research for this node or the whole unit. */
+function sourcesFor(s: EngineState, nodeId: string) {
+  const node = s.plan?.nodes.find(n => n.id === nodeId);
+  const research = [...s.packs.values()].flatMap(p => p.items.filter(i => p.acceptedItemIds.includes(i.id) && (!i.nodeId || i.nodeId === nodeId)));
+  return { learner: [...new Set([...(s.goal.sourceIds ?? []), ...(node?.sourceIds ?? [])])], research };
 }

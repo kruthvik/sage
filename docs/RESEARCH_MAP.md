@@ -70,7 +70,9 @@ None of these numbers has support in the corpus (S §4: *"No exact success thres
 | ED-22 | Node digest | ≤120 tokens | |
 | ED-23 | Tutor packet cap | 12,000 chars | v3 was 16,000 |
 | ED-24 | Grader feedback cap | 60 words | |
-| ED-25 | Precision / polish deductions | −5 / −1 per flaw | owner, M2 batch |
+| ED-25 | Precision / polish deductions | precision −7 (5–10), polish −1 (0–2, total ≤4); only on met criteria | owner reply 2 |
+| ED-28 | Researcher limits | ≤6 searches, ≤6 fetches, ≤4,096 output tokens per run | owner reply 2 |
+| ED-29 | Grader calibration | MAE ≤8; mean signed error ≤ +3; no target ≤85 scores ≥95 | §18.4 + owner reply 2 |
 | ED-26 | Repeated-failure escalation N | 2 | RM-16 |
 | ED-27 | Max cue levels in a diminishing-cue sequence | 3 | RM-04 |
 

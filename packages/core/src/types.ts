@@ -9,18 +9,21 @@ export type ExamFormat = "mcq" | "short" | "free_response" | "problem" | "essay"
 export interface ExamBlueprint {
   formats: ExamFormat[];
   topicWeights: { nodeOrSubskillId: string; importance: "high" | "medium" | "low" }[];
-  timing?: string; gradingCriteria?: string; sampleSourceIds?: string[];
+  /** A specific exam or course (exam board, a particular class). Triggers the researcher (owner reply 2, trigger d). */
+  name?: string; timing?: string; gradingCriteria?: string; sampleSourceIds?: string[];
 }
 
 export interface LearningPreview {
   profile: "balanced" | "cram" | "thorough" | "custom";
-  toggles: { diagnostic: boolean; hints: boolean; studio: boolean; diagrams: boolean; pdfCheatsheets: boolean; obsidianExport: boolean; reviewBeforeAdvance: boolean };
+  toggles: { diagnostic: boolean; hints: boolean; studio: boolean; diagrams: boolean; pdfCheatsheets: boolean; obsidianExport: boolean; reviewBeforeAdvance: boolean; autoAcceptResearch?: boolean };
   feedbackRigor: "rigorous" | "focused";
 }
 
 export interface Goal {
   objective: string; mode: Mode; pace: Pace; timeBudgetMin?: number; horizonDays?: number;
   exam?: ExamBlueprint; allowedAids: string[]; accommodations?: string; learnerParams?: string; preview: LearningPreview;
+  /** Learner-attached, accepted sources. They outrank anything the researcher finds. */
+  sourceIds?: string[];
 }
 
 /** declarative ⇒ recall-type; procedural ⇒ execution-type (SPEC §10 "by subskill type"). */
@@ -29,12 +32,18 @@ export interface SubSkill {
   id: string; nodeId: string; statement: string; kind: SubSkillKind; selectionRelevant: boolean;
   /** Any-of groups: every group needs one observed member. Set by the engine from the mode at plan approval. */
   requiredDimensions: Dimension[][];
+  /** Text can't verify pronunciation, physical execution or performance; name the text-checkable proxy used instead (owner reply 2). */
+  proxyFor?: string;
 }
 export type NodeStatus = "locked" | "ready" | "active" | "gated" | "passed" | "tested_out" | "needs_repair" | "left_with_gaps";
 export interface PlanNode {
   id: string; title: string; order: number; prerequisites: string[]; subskills: SubSkill[];
   examWeight: "high" | "medium" | "low"; misconceptionsToProbe: string[]; estMinutes: number; status: NodeStatus;
-  digest?: string; micro?: boolean;
+  digest?: string; micro?: boolean; passedAtMin?: number;
+  /** Planner's confidence in its own knowledge of this node; `low` triggers research (niche, recent, course-specific, local rules). */
+  knowledgeConfidence?: "low" | "medium" | "high";
+  /** Accepted sources covering this node. Empty while the learner has sources ⇒ uncovered ⇒ research. */
+  sourceIds?: string[];
 }
 export interface Plan { rev: number; nodes: PlanNode[]; edges: [string, string][]; approvedAt?: string }
 
@@ -73,7 +82,7 @@ export interface AssistanceRecord {
 export interface Attempt {
   id: string; itemId: string; responseEventId: string; response: string; at: string;
   assistance: AssistanceRecord[]; independent: boolean; isRepair: boolean; cueLevel: 0 | 1 | 2 | 3; latencyMs: number;
-  grade?: Grade; supersededGrades?: Grade[]; diagnostic?: boolean;
+  grade?: Grade; supersededGrades?: Grade[]; diagnostic?: boolean; check?: "node_check" | "final";
 }
 
 export type HypothesisCategory = "conceptual" | "procedural" | "selection" | "representation" | "prerequisite" | "slip" | "unknown";
@@ -102,3 +111,10 @@ export interface SessionState {
 /** Voice recall is deferred (SPEC §16); only the input shape is defined. */
 export type ResponseInput = { kind: "text"; text: string } | { kind: "choice"; index: number } | { kind: "fields"; fields: Record<string, string> }
   | { kind: "image"; blobHashes: string[] } | { kind: "audio_transcript"; text: string };
+
+/** Researcher output (owner reply 2). Each item goes through the normal preview → accept source flow. */
+export interface SourcePackItem {
+  id: string; title: string; url?: string; citation?: string; relevance: string; spans: string[]; reliability: string;
+  nodeId?: string; conflictsWithSourceId?: string; unsourced?: boolean;
+}
+export interface SourcePack { id: string; trigger: "intake" | "node_uncovered" | "low_confidence" | "exam" | "tutor_request"; nodeId?: string; question?: string; items: SourcePackItem[]; status: "pending" | "accepted" | "partially_accepted" | "declined"; acceptedItemIds: string[] }

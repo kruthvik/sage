@@ -1,4 +1,4 @@
-import type { AssistanceRecord, Attempt, Candidate, Decision, Goal, Grade, Hypothesis, Item, LoopPhase, Plan, ResponseInput } from "../../core/src/types.ts";
+import type { AssistanceRecord, Attempt, Candidate, Decision, Goal, Grade, Hypothesis, Item, LoopPhase, Plan, ResponseInput, SourcePack, SourcePackItem } from "../../core/src/types.ts";
 
 export interface Chunk { text: string; nodeId: string; subskillIds: string[]; exampleItemId?: string; at: string; prime?: boolean }
 export interface ReviewCard { subskillId: string; intervalDays: number; dueAt: string; consented: boolean }
@@ -23,6 +23,7 @@ export interface EngineState {
   time: { lastAt?: string; nodeMs: Map<string, number>; idleGaps: number; noticeNodeId?: string; noticeProjectedMin?: number };
   confirm: Map<string, string>; counter: number;
   reviews: ReviewCard[]; leftWithGaps: Map<string, string[]>;
+  packs: Map<string, SourcePack>; researchKeys: Set<string>;   // researcher packs; trigger keys already requested (cache)
   spend: { calls: number; inputTokens: number; outputTokens: number; costUsd: number | "unknown" };
   timeline: TimelineEntry[];
 }
@@ -49,19 +50,22 @@ export type EngineEvent =
   | { type: "reviews_consented"; subskillIds: string[] }
   | { type: "digest_written"; nodeId: string; digest: string }
   | { type: "role_call_logged"; role: string; inputTokens: number; outputTokens: number; costUsd?: number }
+  | { type: "research_requested"; question: string }
+  | { type: "research_pack_received"; pack: Omit<SourcePack, "status" | "acceptedItemIds">; items?: SourcePackItem[] }
+  | { type: "research_pack_accepted"; packId: string; itemIds?: string[] }
   | { type: "tick" };
 
 /** Who may emit each event (DESIGN.md). The reducer rejects anything else, so a model can't author learner work (F10). */
 export const EVENT_ACTOR: Record<EngineEvent["type"], "learner" | "role" | "tutor" | "host"> = {
   session_created: "learner", plan_edited: "learner", plan_approved: "learner", hint_requested: "learner", chunk_peeked: "learner",
   response_submitted: "learner", feedback_acked: "learner", grade_disputed: "learner", control: "learner", pace_set: "learner",
-  time_extended: "learner", reviews_consented: "learner",
+  time_extended: "learner", reviews_consented: "learner", research_pack_accepted: "learner", research_requested: "tutor", research_pack_received: "role",
   plan_proposed: "role", bank_generated: "role", grade_received: "role", digest_written: "role", role_call_logged: "host",
   chunk_presented: "tutor", item_presented: "tutor", move_selected: "tutor", hypothesis_proposed: "tutor", tick: "host",
 };
 
 export type Effect =
-  | { kind: "call_role"; role: "planner" | "generator" | "grader" | "summarizer"; purpose: string; input: Record<string, unknown> }
+  | { kind: "call_role"; role: "planner" | "generator" | "grader" | "summarizer" | "researcher"; purpose: string; background?: boolean; input: Record<string, unknown> }
   | { kind: "tutor_turn"; phase: LoopPhase; tools: readonly string[]; candidates: Candidate[] }
   | { kind: "present_chunk"; text: string }
   | { kind: "present_item"; item: PublicItem; cueText?: string }
@@ -84,8 +88,8 @@ export const publicItem = (i: Item): PublicItem => ({ id: i.id, nodeId: i.nodeId
 
 /** Phase-relevant tool advertising (F9, SPEC §12.3). */
 export const TOOLS_BY_PHASE: Partial<Record<LoopPhase, readonly string[]>> = {
-  diagnostic: ["context", "present"], prime: ["context", "present"], teach: ["context", "present", "activity"],
-  check: ["context", "present", "activity"], adapt: ["context", "select_move", "propose"], repair: ["context"],
+  diagnostic: ["context", "present"], prime: ["context", "present"], teach: ["context", "present", "activity", "request_research"],
+  check: ["context", "present", "activity", "request_research"], adapt: ["context", "select_move", "propose", "request_research"], repair: ["context"],
 };
 
 export function initialState(): EngineState {
@@ -94,6 +98,6 @@ export function initialState(): EngineState {
     items: new Map(), attempts: [], hypotheses: new Map(), decisions: [], deliveredAt: new Map(), exposedFamilies: new Map(),
     chunkCollapsed: false, cue: new Map(), disputed: new Set(), candidates: [], nextIntendedMove: "",
     diagnostic: { status: "none" }, time: { nodeMs: new Map(), idleGaps: 0 }, confirm: new Map(), counter: 0,
-    reviews: [], leftWithGaps: new Map(), spend: { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 }, timeline: [],
+    reviews: [], leftWithGaps: new Map(), packs: new Map(), researchKeys: new Set(), spend: { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 }, timeline: [],
   };
 }
