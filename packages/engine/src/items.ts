@@ -1,6 +1,17 @@
 import type { Grade, Item, ResponseInput } from "../../core/src/types.ts";
 import { ACTIVITY_EVIDENCE, CHECK_CHUNK_OVERLAP_MAX, PASS_MARK } from "./pedagogy.config.ts";
 
+/** The learner's final answer in a worked response: the value after the last "=" and the last number in the text
+ * (simple fractions like -1/8 and \frac{1}{4} included). Intermediate working never counts; a bare answer is both. */
+export function finalNumbers(text: string): number[] {
+  const re = /-?\d+(?:\.\d+)?(?:e-?\d+)?(?:\s*\/\s*-?\d+(?:\.\d+)?)?/gi;
+  const val = (m: string) => { const [p, q] = m.split("/").map(x => Number(x.trim())); return q === undefined ? p! : p! / q; };
+  const clean = text.replace(/(\d),(\d{3})/g, "$1$2").replace(/\\frac\{(-?[\d.]+)\}\{(-?[\d.]+)\}/g, "$1/$2").replace(/[−–]/g, "-");
+  const all = [...clean.matchAll(re)].map(m => m[0]);
+  const afterEq = clean.includes("=") ? clean.slice(clean.lastIndexOf("=") + 1).match(re)?.[0] : undefined;
+  return [...new Set([all.at(-1), afterEq].filter((m): m is string => !!m).map(val))].filter(Number.isFinite);
+}
+
 /** v3 cosmetic-variant fingerprint: numbers normalised, so a numeric substitution is the same family (RM-10). */
 export const fingerprint = (stem: string) => stem.toLowerCase().replace(/(?<![\w.])(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/g, "#").replace(/\s+/g, " ").trim();
 
@@ -74,7 +85,7 @@ export function gradeDeterministic(item: Item, input: ResponseInput): Grade | un
   else {
     const text = input.kind === "text" ? input.text.trim() : input.kind === "fields" ? Object.values(input.fields).join(" ").trim() : "";
     quote = text;
-    if (k.kind === "numeric") { const n = Number(text.replace(/,/g, "").match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/i)?.[0]); ok = Number.isFinite(n) && Math.abs(n - k.value) <= k.tolerance; }
+    if (k.kind === "numeric") ok = finalNumbers(text).some(n => Math.abs(n - k.value) <= Math.max(k.tolerance, 1e-9 * Math.abs(k.value)));
     else { const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim(); ok = k.values.some(v => norm(v) === norm(text)); }
   }
   const correctText = keyTerms(item)[0] ?? "";
