@@ -4,6 +4,7 @@ import type { EngineEvent, EngineState, Effect } from "../../engine/src/state.ts
 import type { Item, PlanNode, Partition } from "../../core/src/types.ts";
 import type { RoleCallInput, RoleCallResult } from "../../pi-adapter/src/runtime.ts";
 import { GRADER_SYSTEM, graderUser, parseGrade } from "./grader.ts";
+import { validateGrade } from "../../engine/src/evidence.ts";
 import { CHECKER_SYSTEM, KEY_DISPUTE_SYSTEM, checkable, checkerUser, compareKey, keyDisputeUser, parseChecker, parseKeyDispute } from "./keycheck.ts";
 import { PLANNER_SYSTEM, plannerUser, parsePlan, GENERATOR_SYSTEM, generatorUser, parseItems, SUMMARIZER_SYSTEM, summarizerUser, parseSummary, researcherSystem, researcherUser, parsePack } from "./roles.ts";
 
@@ -92,7 +93,7 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
         break;
       }
       const grade = await call("grader", GRADER_SYSTEM, graderUser(item, String(fx.input.response), {
-        assistance: fx.input.assistance as string[] | undefined, ...(typeof fx.input.argument === "string" ? { argument: fx.input.argument } : {}) }), t => parseGrade(t, item));
+        assistance: fx.input.assistance as string[] | undefined, ...(typeof fx.input.argument === "string" ? { argument: fx.input.argument } : {}) }), t => { const g = parseGrade(t, item); const probs = validateGrade(g, String(fx.input.response)); if (probs.length) throw new Error(`grade rejected: ${probs.join(", ")}`); return g; });
       // Repair attempts never count as evidence (the engine also enforces this).
       out.push({ actor: "role", event: { type: "grade_received", attemptId: String(fx.input.attemptId), grade: fx.purpose === "repair" ? { ...grade, dimensionsObserved: [] } : grade } });
       break;

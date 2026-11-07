@@ -1,7 +1,6 @@
 // Real-grader calibration (SPEC §18.4, task 3). Usage: bun packages/eval/calibration/run-grader.ts <provider>/<model> [repeats]
 // Reports A1–A10 (owner-scored, final) and C01–C20 (Claude-written, UNREVIEWED) separately; only A1–A10 is a gate until the owner confirms C.
-// Credentials: Sage's own agent dir by default. SAGE_EVAL_AGENT_DIR=<dir> is an explicit dev opt-in to read another pi agent dir
-// (e.g. ~/.pi/agent) in place; nothing is copied. Extension providers from that dir's settings load only for the requested provider.
+// Credentials: Sage's own agent dir only (sage setup + sage login).
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { evalRuntime } from "../src/eval-runtime.ts";

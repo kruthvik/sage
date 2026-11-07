@@ -70,3 +70,24 @@ test("a rejected key dispute keeps the grade; key disputes need the feedback to 
   d.go({ type: "feedback_acked", attemptId: "a1" }, "learner");
   expect(() => d.go({ type: "grade_disputed", attemptId: "a1", argument: "late" }, "learner")).toThrow();
 });
+
+test("regression (flash eval): choosing checkpoint saves and hands the tutor another turn without it, so the session never waits on nothing", () => {
+  const d = driver(120);
+  d.go({ type: "plan_proposed", plan }, "role");
+  d.go({ type: "plan_approved" }, "learner");
+  d.go({ type: "bank_generated", purpose: "node", nodeId: "n1", items: bank("n1", "s1") }, "role");
+  d.go({ type: "item_presented", itemId: "s1-p1" }, "tutor");
+  d.go({ type: "response_submitted", input: { kind: "text", text: "27" }, responseEventId: "r1", latencyMs: 1000 }, "learner");
+  d.go({ type: "feedback_acked", attemptId: "a1" }, "learner"); // prime → teach
+  d.go({ type: "chunk_presented", text: "Bring the exponent down and lower it by one.", subskillIds: ["s1"] }, "tutor");
+  d.go({ type: "item_presented", itemId: "s1-p2" }, "tutor");
+  d.go({ type: "response_submitted", input: { kind: "text", text: "5" }, responseEventId: "r2", latencyMs: 1000 }, "learner");
+  d.go({ type: "feedback_acked", attemptId: "a2" }, "learner");
+  expect(d.s.phase).toBe("adapt");
+  const cp = d.s.candidates.find(c => c.kind === "checkpoint")!;
+  const fx = d.go({ type: "move_selected", candidateId: cp.id, reasonCodes: ["natural_pause"], nextIntendedMove: "pause" }, "tutor");
+  expect(fx.map(f => f.kind)).toEqual(["checkpoint", "write_export", "tutor_turn"]);
+  const t = fx.find(f => f.kind === "tutor_turn") as Extract<Effect, { kind: "tutor_turn" }>;
+  expect(t.candidates.some(c => c.kind === "checkpoint")).toBe(false);
+  expect(t.candidates.length).toBeGreaterThan(0);
+});

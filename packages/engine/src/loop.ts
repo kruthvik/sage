@@ -482,7 +482,12 @@ function applyMove(s: EngineState, c: Candidate, now: string, fx: Effect[]): voi
       return present(s, s.items.get(ladder.itemId)!, level, "loop", now, fx);
     }
     case "node_check": return buildCheck(s, activeNode(s)!, false, now, fx);
-    case "checkpoint": fx.push({ kind: "checkpoint" }, { kind: "write_export", what: "session" }); return;
+    case "checkpoint": {
+      // A pause point, not a move: save, then the tutor picks a real move (otherwise the session waits on nothing).
+      s.candidates = s.candidates.filter(x => x.kind !== "checkpoint");
+      fx.push({ kind: "checkpoint" }, { kind: "write_export", what: "session" }, turn(s));
+      return;
+    }
     case "advance": return;
   }
 }

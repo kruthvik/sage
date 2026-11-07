@@ -2,7 +2,7 @@
 // adaptive tutor vs a fixed baseline (same real planner/generator/grader; deterministic non-adaptive tutor from fake-runtime).
 // Primary metrics first: nodes passed within budget, minutes to pass each node, end-of-session mixed check, cost per session-hour.
 // Clock is virtual: learner think/read time advances it; model latency does not (reported separately as wall time).
-// Usage: SAGE_EVAL_AGENT_DIR=~/.pi/agent [EVAL_MODEL=provider/model] bun packages/eval/src/cram-eval.ts [unitIds,comma] [--baseline-only|--adaptive-only]
+// Usage (Sage's own agent dir; run `sage setup` + `sage login` first): [EVAL_MODEL=provider/model] bun packages/eval/src/cram-eval.ts [unitIds,comma] [--baseline-only|--adaptive-only]
 // EVAL_MODEL puts every role (and the simulated learner) on one model, e.g. antigravity/gemini-3.8-flash.
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";

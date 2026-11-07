@@ -2,7 +2,8 @@ import type { Attempt, Dimension, Grade, Hypothesis, Item, Mode, Pace, SubSkill 
 import { HIGH_OPEN_HYPOTHESIS_BLOCKS, K_CHECKS, minFamilies, RETENTION_MIN_DELAY_MS } from "./pedagogy.config.ts";
 import { passed } from "./items.ts";
 
-const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+// Quotes must be the learner's words; punctuation, math symbols and spacing may differ (models re-render "x^(-2/3)" etc.).
+const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /** Model grades must quote the actual response (v3: invented evidence quotes are rejected). Returns problems. */
 export function validateGrade(g: Grade, response: string): string[] {

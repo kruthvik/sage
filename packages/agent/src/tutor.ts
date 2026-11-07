@@ -35,8 +35,9 @@ function task(fx: TutorTurnFx, s: EngineState): string {
 /** Deterministic fallback when the tutor model fails twice: same choices the stub tutor makes, applied through the same reducer in the tutor role (it stands in for the tutor; the outcome is labelled). */
 function fallback(fx: TutorTurnFx, s: EngineState, apply: TutorDeps["apply"]): string | undefined {
   if (fx.phase === "adapt") {
-    const c = fx.candidates.find(x => x.kind !== "checkpoint") ?? fx.candidates[0];
-    if (c && !apply({ type: "move_selected", candidateId: c.id, reasonCodes: ["fallback_first_candidate"], nextIntendedMove: c.kind }, "tutor")) return `selected ${c.kind}`;
+    // Real moves first, in the engine's priority order; a rejected one (e.g. an exhausted cue ladder) falls through to the next.
+    for (const c of [...fx.candidates.filter(x => x.kind !== "checkpoint"), ...fx.candidates.filter(x => x.kind === "checkpoint")])
+      if (!apply({ type: "move_selected", candidateId: c.id, reasonCodes: ["fallback_first_candidate"], nextIntendedMove: c.kind }, "tutor")) return `selected ${c.kind}`;
   }
   if (fx.phase === "check" || fx.phase === "prime" || fx.phase === "diagnostic") {
     const it = [...s.items.values()].find(i => i.partition === "practice" && !s.deliveredAt.has(i.id) && (fx.phase === "diagnostic" || i.nodeId === s.activeNodeId));

@@ -107,7 +107,8 @@ export class SessionDriver {
           for (let attempt = 0; ; attempt++) {
             try {
               const evs = await runRole(fx, this.state, { models: this.models, roleCall: this.rt.roleCall, researchCall: this.rt.researchCall, signal: this.abort.signal }, ++this.seq);
-              for (const e of evs) { const err = this.apply(e.event, e.actor); if (err) this.out("error", { code: "role_output_rejected", role: fx.role, message: err }); }
+              const rejected = evs.map(e => this.apply(e.event, e.actor)).filter((x): x is string => !!x);
+              if (rejected.length) throw new Error(`role output rejected: ${rejected.join("; ")}`); // same retry-then-park path as a failed call
               return;
             } catch (e) {
               // One automatic retry for transient failures (timeouts, provider errors); then park the effect for session.retry.
