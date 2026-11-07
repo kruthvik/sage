@@ -1,6 +1,6 @@
-# Grader calibration anchors: owner to grade
+# Grader calibration anchors (FINAL, owner-scored 2026-11-07)
 
-These 10 anchors become the ground truth that the grader role is calibrated against (SPEC §18.4: MAE ≤ 8, and no response with target ≤ 85 may score ≥ 95). The other ≥20 triples will be generated around them.
+**The owner scores are authoritative and live in `set.ts` (`ANCHORS`).** The "Proposed" numbers below were Claude's first drafts. They were 10–25 points too lenient on A2, A5, A7, A8 and A9, which is F1 showing up in the item author. Grading rules: criteria first (met / partly / not), deductions only on met criteria (precision −7, range 5–10; polish −1, total ≤4), and repeating an answer the stem gives earns nothing.
 
 For each anchor, fill in **Your score** and adjust the flaws. Severity is `blocking` (wrong or missing idea; repair required), `precision` (imprecise wording a strict examiner would penalise; **deducts**), or `polish` (style; small or no deduction). My proposed numbers are there to react to. Overwrite them freely.
 

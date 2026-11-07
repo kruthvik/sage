@@ -16,7 +16,7 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 |---|---|---|
 | M0 Orientation ◆ | done; batch 1 answered | n/a (docs only) |
 | M1 Pure engine + ledger | **done** | `bun test`: 36 pass · `tsc` clean · `bun run eval` all 6 personas, 0 reducer errors |
-| M2 Agent layer ◆ | **started**: `packages/pi-adapter/src/sdk.ts` (sole pi importer, pinned 1.5.0, selection loader); calibration anchors drafted; deductions in config | `bun test packages/pi-adapter`: 3 pass (pi 1.5.0 loads; required exports present; F13 import guard) |
+| M2 Agent layer ◆ | **in progress**: pi adapter `sdk.ts` (1.5.0); calibration set (10 owner anchors + 20 unreviewed triples, 9 domains) + `calibrate()` harness; engine researcher hooks + Cram metrics | `bun test`: 51 pass · `tsc` clean · commits `c10e2c4`, `bd6f4dc` + calibration commit |
 | M3 Server/API/dev console ◆ | not started | |
 | M4 Exports | not started | |
 | M5 Activities ◆ | not started | |
@@ -86,9 +86,9 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. M2: finish `packages/pi-adapter`. Port v3 `packages/pi/src/{runtime,resources,plugins}.ts` (isolated agent dir, `PI_CODING_AGENT_DIR`, no ambient `.pi`/`~/.agents/skills`, telemetry off, auto-compaction off, `pi-web-access` + `pi-subagents` provisioned under Sage's agent dir) and `planner.ts`'s `runBoundedPiChild` as the generic one-shot role transport (≤4,096 output tokens, 60 s, cancelable). Then `ui-bridge.ts`, covering the 27 `ctx.ui` methods listed under Owner decisions. Skip `shared-runtime.ts` (dropped).
-2. M2: `packages/agent`: role prompts (planner whole-unit DAG, generator bank, grader, feynman, summarizer), context packet ≤12,000 chars with drill-down (port v3 `runtime/src/context.ts`), char and token accounting. Then `packages/sage-extension`: 5 phase-scoped tools that emit tutor events, plus the short policy.
-3. M2: grader calibration set (`packages/eval/calibration/`) with ≥30 triples including owner anchors; MAE ≤8, nothing with target ≤85 scoring ≥95.
+1. M2: finish `packages/pi-adapter`. Port v3 `packages/pi/src/{runtime,resources,plugins}.ts` (isolated agent dir, `PI_CODING_AGENT_DIR`, no ambient `.pi`/`~/.agents/skills`, telemetry off, auto-compaction off, `pi-web-access` provisioned (NOT pi-subagents: owner reply 2) under Sage's agent dir) and `planner.ts`'s `runBoundedPiChild` as the generic one-shot role transport (≤4,096 output tokens, 60 s, cancelable). Then `ui-bridge.ts`, covering the 27 `ctx.ui` methods listed under Owner decisions. Skip `shared-runtime.ts` (dropped).
+2. M2: `packages/agent`: **domain-neutral** role prompts (planner decomposes *any* topic by what the learner must do, sets `knowledgeConfidence`, `proxyFor` for non-text skills; generator bank; grader with criteria-first partial credit + deductions from `DEDUCTION`; feynman; summarizer; **researcher** using `pi-web-access` tools `web_search` / `fetch_content` / `get_search_content` / `source_check`, which need a provider key (Brave/Exa/Tavily/Perplexity/Gemini/Jina), else unsourced fallback), context packet ≤12,000 chars with drill-down (port v3 `runtime/src/context.ts`), char/token accounting. Then `packages/sage-extension`: phase-scoped tools `context`, `select_move`, `present`, `propose`, `activity`, `request_research` + the short policy.
+3. M2: run the real grader against `calibrate()` (`packages/eval/calibration/set.ts`) with MAE ≤8, mean signed error ≤ +3, nothing with target ≤85 at ≥95. Ask the owner to spot-check C01–C20 (written by Claude, unreviewed). Then M3: 5-domain Cram units (≥1 non-academic) for the simulated-learner eval.
 
 ## Commands
 

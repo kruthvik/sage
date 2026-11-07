@@ -1,0 +1,98 @@
+// Grader calibration set (SPEC §18.4, owner reply 2). A1–A10 are owner-scored and final.
+// C01–C20 were written by Claude under the owner's rules and are UNREVIEWED: the owner should spot-check them,
+// because his review found Claude's first proposals 10–25 points too lenient.
+// Rules: score criteria first (met / partly / not); deductions only on a *met* criterion worded imprecisely
+// (precision −7 typical, −10 for standard examiner deductions; polish −1, polish total ≤4); repeating an answer the stem gives earns nothing.
+import type { ActivityType, FlawSeverity } from "../../core/src/types.ts";
+
+export interface Triple {
+  id: string; domain: string; author: "owner" | "claude_unreviewed"; tags: ("right_answer_wrong_reason" | "precision_only" | "strong" | "weak")[];
+  activityType: ActivityType; stem: string; rubric: string[]; response: string; target: number;
+  flaws: { severity: FlawSeverity; quote: string; problem: string }[];
+}
+
+const ibp = { activityType: "explain_why" as const, stem: "Explain why integration by parts works, and how you choose u.", rubric: ["links it to the product rule", "states ∫u dv = uv − ∫v du", "gives a reason for the choice of u (its derivative simplifies)"] };
+const versailles = { activityType: "free_recall" as const, stem: "Argue whether the Treaty of Versailles was the main cause of the Second World War. Use at least two pieces of evidence.", rubric: ["clear claim", "at least two specific pieces of evidence", "addresses a counter-argument", "conclusion follows from the evidence"] };
+
+export const ANCHORS: Triple[] = [
+  { id: "A1", domain: "math", author: "owner", tags: ["strong"], ...ibp, response: "It comes from the product rule backwards. ∫u dv = uv − ∫v du. You pick u to be the thing that gets simpler when you differentiate it, like a polynomial.", target: 94,
+    flaws: [{ severity: "polish", quote: "It comes from the product rule backwards", problem: "asserts the link without showing it" }] },
+  { id: "A2", domain: "math", author: "owner", tags: ["precision_only"], ...ibp, response: "It's the product rule but reversed. You do uv minus the integral of the other one. Pick u as whatever is easier.", target: 55,
+    flaws: [{ severity: "blocking", quote: "Pick u as whatever is easier", problem: "no reason given for choosing u" }, { severity: "precision", quote: "the integral of the other one", problem: "never states ∫v du" }] },
+  { id: "A3", domain: "math", author: "owner", tags: ["precision_only"], activityType: "apply_problem", stem: "Evaluate ∫ 2x·cos(x²) dx. Show your substitution.", rubric: ["correct substitution", "correct antiderivative"], response: "Let u = x², du = 2x dx. So ∫cos(u) du = sin(u) = sin(x²).", target: 88,
+    flaws: [{ severity: "precision", quote: "= sin(u) = sin(x²)", problem: "missing + C (standard deduction, 10)" }] },
+  { id: "A4", domain: "math", author: "owner", tags: ["weak"], activityType: "method_choice", stem: "Which method would you use for ∫ x·eˣ dx, and why? Don't solve it.", rubric: ["names integration by parts", "justifies from the product structure"], response: "Substitution, because there's an e^x.", target: 5,
+    flaws: [{ severity: "blocking", quote: "Substitution", problem: "wrong method" }, { severity: "blocking", quote: "because there's an e^x", problem: "chooses by surface cue" }] },
+  { id: "A5", domain: "biology", author: "owner", tags: ["precision_only"], activityType: "free_recall", stem: "Where in the cell does the electron transport chain happen, and what is the final electron acceptor?", rubric: ["location: inner mitochondrial membrane", "final acceptor: oxygen"], response: "In the mitochondria. Oxygen is the final acceptor.", target: 75,
+    flaws: [{ severity: "precision", quote: "In the mitochondria", problem: "location only partly met: inner mitochondrial membrane" }] },
+  { id: "A6", domain: "biology", author: "owner", tags: ["strong"], activityType: "explain_why", stem: "Explain why cyanide, which blocks complex IV, stops ATP production even though glycolysis can still run.", rubric: ["electrons can't reach O₂", "no proton pumping, no gradient", "ATP synthase needs the gradient", "glycolysis gives only 2 ATP net"], response: "Cyanide stops the electrons getting to oxygen so the chain backs up. No protons get pumped so there's no gradient and ATP synthase can't make ATP. Glycolysis still makes some ATP but not enough.", target: 90,
+    flaws: [{ severity: "precision", quote: "Glycolysis still makes some ATP but not enough", problem: "criterion 4 partly met: never says 2 ATP net" }] },
+  { id: "A7", domain: "biology", author: "owner", tags: ["weak"], activityType: "find_the_error", stem: "A student wrote: \"The Krebs cycle produces most of the cell's ATP directly.\" Find and correct the error.", rubric: ["identifies that Krebs makes little ATP directly", "says most ATP comes from oxidative phosphorylation", "names the electron carriers"], response: "Wrong, the Krebs cycle makes most of the energy as NADH.", target: 55,
+    flaws: [{ severity: "blocking", quote: "Wrong, the Krebs cycle makes most of the energy as NADH.", problem: "never says where most ATP is made" }, { severity: "precision", quote: "most of the energy as NADH", problem: "omits FADH₂ and the ETC" }] },
+  { id: "A8", domain: "history", author: "owner", tags: ["weak"], ...versailles, response: "The Treaty was a major cause but not the only one. The war guilt clause and reparations created resentment that Hitler used. However the Great Depression was also key because it made extremist parties popular. Appeasement also let Hitler expand. So Versailles was a cause but the Depression was the trigger.", target: 65,
+    flaws: [{ severity: "blocking", quote: "the Depression was the trigger", problem: "doesn't follow; misuses 'trigger'" }, { severity: "precision", quote: "a major cause but not the only one", problem: "dodges 'main cause'" }, { severity: "precision", quote: "The war guilt clause and reparations", problem: "evidence named but not specific" }] },
+  { id: "A9", domain: "history", author: "owner", tags: ["weak"], ...versailles, response: "Yes because Germany was angry about the treaty and wanted revenge so they started the war.", target: 15,
+    flaws: [{ severity: "blocking", quote: "Yes because Germany was angry about the treaty", problem: "no specific evidence" }, { severity: "blocking", quote: "wanted revenge so they started the war", problem: "no counter-argument" }, { severity: "precision", quote: "Germany was angry", problem: "no actor or mechanism" }] },
+  { id: "A10", domain: "math", author: "owner", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "Why does ∫₋₁¹ x³ dx equal 0?", rubric: ["odd function: f(−x) = −f(x)", "signed areas on [−1,0] and [0,1] cancel"], response: "Because x³ is zero at x = 0, which is in the middle of the interval.", target: 0,
+    flaws: [{ severity: "blocking", quote: "Because x³ is zero at x = 0", problem: "wrong reason; the value 0 is given in the stem" }] },
+];
+
+export const GENERATED: Triple[] = [
+  // Language learning (Spanish)
+  { id: "C01", domain: "language", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "Choose ser or estar for 'La sopa ___ fría' (the soup is cold right now) and explain why.", rubric: ["chooses está", "reason: temporary state/condition, not identity"], response: "Está, because soup is a thing and you use estar for things.", target: 30,
+    flaws: [{ severity: "blocking", quote: "because soup is a thing and you use estar for things", problem: "wrong rule; ser is also used for things" }] },
+  { id: "C02", domain: "language", author: "claude_unreviewed", tags: ["precision_only"], activityType: "free_recall", stem: "Translate into Spanish: 'I have been living in Madrid for two years.'", rubric: ["uses llevar + gerund or hace … que + present", "correct verb forms", "correct time expression"], response: "Hace dos años que vivo en Madrid.", target: 100, flaws: [] },
+  { id: "C03", domain: "language", author: "claude_unreviewed", tags: ["precision_only"], activityType: "free_recall", stem: "Write one Spanish sentence using the subjunctive after 'quiero que'.", rubric: ["subjunctive after quiero que", "correct conjugation", "sentence is grammatical"], response: "Quiero que tu vengas a la fiesta.", target: 93,
+    flaws: [{ severity: "precision", quote: "tu vengas", problem: "missing accent: tú (pronoun) vs tu (possessive)" }] },
+  // Programming
+  { id: "C04", domain: "programming", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "find_the_error", stem: "This Python function should return the sum of a list but returns 0 for [1, 2, 3]:\ndef total(xs):\n    s = 0\n    for x in xs:\n        s = s + x\n        return s\n    return 0\nWhat's wrong?", rubric: ["identifies the early return inside the loop", "explains it returns after the first iteration", "gives the fix: dedent return"], response: "The return is wrong, it should be return s at the end instead of return 0.", target: 35,
+    flaws: [{ severity: "blocking", quote: "it should be return s at the end instead of return 0", problem: "misses that the return inside the loop fires on the first iteration (the function actually returns 1, not 0)" }] },
+  { id: "C05", domain: "programming", author: "claude_unreviewed", tags: ["precision_only"], activityType: "explain_why", stem: "Explain what a Python list comprehension [x*x for x in range(5) if x % 2 == 0] produces and why.", rubric: ["result [0, 4, 16]", "range(5) gives 0–4", "filter keeps even x before squaring"], response: "It gives [0, 4, 16] because it squares the even numbers in the range.", target: 86,
+    flaws: [{ severity: "precision", quote: "the even numbers in the range", problem: "doesn't say range(5) is 0–4 (criterion 2 partly met)" }] },
+  { id: "C06", domain: "programming", author: "claude_unreviewed", tags: ["strong"], activityType: "method_choice", stem: "You need to check membership of 10 million IDs repeatedly. List or set, and why? Don't write code.", rubric: ["chooses set", "reason: average O(1) hash lookup vs O(n) list scan"], response: "A set, because lookups hash the ID so they're O(1) on average, while a list has to scan every element, O(n).", target: 98, flaws: [] },
+  // Philosophy / argument
+  { id: "C07", domain: "argument", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "Is this argument valid? 'All cats are mammals. My dog is a mammal. So my dog is a cat.' Explain.", rubric: ["says invalid", "names the form: undistributed middle / affirming the consequent", "explains conclusion doesn't follow even if premises are true"], response: "Invalid, because dogs aren't cats.", target: 20,
+    flaws: [{ severity: "blocking", quote: "because dogs aren't cats", problem: "judges by the conclusion's truth, not the form" }] },
+  { id: "C08", domain: "argument", author: "claude_unreviewed", tags: ["precision_only"], activityType: "explain_why", stem: "What is the difference between a valid and a sound argument?", rubric: ["valid: conclusion follows from the premises", "sound: valid and the premises are true"], response: "Valid means the conclusion follows. Sound means it's valid and also true.", target: 72,
+    flaws: [{ severity: "precision", quote: "it's valid and also true", problem: "doesn't say the *premises* are true (criterion 2 partly met)" }] },
+  { id: "C09", domain: "argument", author: "claude_unreviewed", tags: ["weak"], activityType: "explain_why", stem: "Give the strongest objection to the claim 'We should always tell the truth.'", rubric: ["states an objection", "uses a concrete case (e.g. murderer at the door)", "shows why the case defeats 'always'"], response: "Sometimes lying is fine.", target: 15,
+    flaws: [{ severity: "blocking", quote: "Sometimes lying is fine.", problem: "no case, no argument" }] },
+  // Practical principles: music theory, chess
+  { id: "C10", domain: "music", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "Why does a G7 chord tend to resolve to C major?", rubric: ["leading tone B resolves up to C", "tritone B–F resolves inward to C–E", "G is the dominant (V) of C"], response: "Because G comes right before C in the alphabet of chords.", target: 0,
+    flaws: [{ severity: "blocking", quote: "G comes right before C in the alphabet of chords", problem: "not a real principle" }] },
+  { id: "C11", domain: "music", author: "claude_unreviewed", tags: ["precision_only"], activityType: "free_recall", stem: "How many sharps are in the key of D major, and which are they?", rubric: ["two sharps", "F♯ and C♯"], response: "Two sharps, F and C.", target: 76,
+    flaws: [{ severity: "precision", quote: "F and C", problem: "names the notes but not as sharps (F♯, C♯): wrong technical term (10)" }] },
+  { id: "C12", domain: "chess", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "Why is it usually good to castle early in the opening?", rubric: ["king safety: moves the king away from the centre", "connects the rooks / activates a rook"], response: "Because castling is a free move that doesn't cost a tempo.", target: 10,
+    flaws: [{ severity: "blocking", quote: "castling is a free move that doesn't cost a tempo", problem: "wrong reason; castling does use a move" }] },
+  { id: "C13", domain: "chess", author: "claude_unreviewed", tags: ["precision_only"], activityType: "explain_why", stem: "What does it mean to 'control the centre' and why does it matter?", rubric: ["occupy or attack d4/d5/e4/e5", "gives pieces more mobility / restricts the opponent"], response: "Having your pieces near the middle so they can move to more places.", target: 78,
+    flaws: [{ severity: "precision", quote: "near the middle", problem: "vague location; doesn't name the central squares or that attacking them counts" }] },
+  // Economics / statistics
+  { id: "C14", domain: "stats", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "A study finds ice-cream sales and drownings rise together. Should we ban ice cream to reduce drownings? Explain.", rubric: ["says no", "names a confounder (hot weather/summer)", "correlation doesn't establish causation"], response: "No, because ice cream is too popular to ban.", target: 15,
+    flaws: [{ severity: "blocking", quote: "because ice cream is too popular to ban", problem: "irrelevant reason; no confounder" }] },
+  { id: "C15", domain: "stats", author: "claude_unreviewed", tags: ["precision_only"], activityType: "explain_why", stem: "What does a 95% confidence interval mean?", rubric: ["the procedure captures the true parameter in 95% of repeated samples", "not a 95% probability that this particular interval contains it"], response: "We're 95% sure the true value is in the interval.", target: 40,
+    flaws: [{ severity: "blocking", quote: "We're 95% sure the true value is in the interval", problem: "the common misreading; criterion 2 not met" }] },
+  { id: "C16", domain: "economics", author: "claude_unreviewed", tags: ["precision_only"], activityType: "explain_why", stem: "Why does a price ceiling below the equilibrium price cause a shortage?", rubric: ["quantity demanded rises at the lower price", "quantity supplied falls", "Qd > Qs is the shortage"], response: "At the lower price more people want it and sellers make less of it, so demand is bigger than supply.", target: 86,
+    flaws: [{ severity: "precision", quote: "demand is bigger than supply", problem: "should be quantity demanded exceeds quantity supplied: wrong technical term" }] },
+  { id: "C17", domain: "personal_finance", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "method_choice", stem: "You have high-interest credit-card debt (24%) and $1,000. Pay off debt or invest in an index fund? Why?", rubric: ["chooses paying the debt", "reason: guaranteed 24% return beats expected market returns"], response: "Pay the debt, because debt is bad and investing is risky.", target: 35,
+    flaws: [{ severity: "blocking", quote: "because debt is bad and investing is risky", problem: "no comparison of the rates; generic reason" }] },
+  // Procedural real-world task
+  { id: "C18", domain: "procedure", author: "claude_unreviewed", tags: ["precision_only"], activityType: "free_recall", stem: "List the steps to change a flat car tyre, in order, from parking safely to stowing the flat.", rubric: ["safe place, hazards, parking brake", "loosen lug nuts before jacking", "jack at the jack point", "swap wheel, hand-tighten in a star pattern", "lower, then fully tighten"], response: "Park somewhere safe with hazards on. Loosen the nuts, jack it up, swap the wheel, tighten the nuts, lower it, tighten again.", target: 79,
+    flaws: [{ severity: "precision", quote: "jack it up", problem: "doesn't say at the jack point" }, { severity: "precision", quote: "tighten the nuts", problem: "doesn't say star pattern / hand-tight first" }, { severity: "polish", quote: "Park somewhere safe", problem: "parking brake not mentioned" }] },
+  { id: "C19", domain: "procedure", author: "claude_unreviewed", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "Why do you loosen the lug nuts before jacking the car up?", rubric: ["the tyre's contact with the ground stops the wheel spinning", "so you can apply torque"], response: "So the nuts don't get lost when the wheel comes off.", target: 0,
+    flaws: [{ severity: "blocking", quote: "So the nuts don't get lost", problem: "wrong reason" }] },
+  { id: "C20", domain: "procedure", author: "claude_unreviewed", tags: ["strong"], activityType: "explain_why", stem: "Why should you never put water on a grease fire?", rubric: ["water sinks and flashes to steam", "steam throws burning oil, spreading the fire"], response: "Water is denser than oil, sinks under it and instantly boils into steam, which explodes upward and sprays burning oil around.", target: 97,
+    flaws: [{ severity: "polish", quote: "explodes upward", problem: "'erupts' is more precise than 'explodes'" }] },
+];
+
+export const CALIBRATION_SET: Triple[] = [...ANCHORS, ...GENERATED];
+
+export interface CalibrationResult { n: number; mae: number; meanSigned: number; lenientViolations: string[]; passed: boolean }
+/** Scores a grader against the set (SPEC §18.4 + owner: MAE ≤ 8, mean signed error ≤ +3, no target ≤85 scoring ≥95). */
+export function calibrate(scores: Record<string, number>, set = CALIBRATION_SET, limits = { maxMae: 8, maxMeanSignedError: 3, ceiling: { target: 85, score: 95 } }): CalibrationResult {
+  const rows = set.filter(t => scores[t.id] !== undefined).map(t => ({ t, d: scores[t.id]! - t.target }));
+  const n = rows.length;
+  const mae = rows.reduce((a, r) => a + Math.abs(r.d), 0) / Math.max(1, n);
+  const meanSigned = rows.reduce((a, r) => a + r.d, 0) / Math.max(1, n);
+  const lenientViolations = rows.filter(r => r.t.target <= limits.ceiling.target && scores[r.t.id]! >= limits.ceiling.score).map(r => r.t.id);
+  return { n, mae, meanSigned, lenientViolations, passed: n === set.length && mae <= limits.maxMae && meanSigned <= limits.maxMeanSignedError && !lenientViolations.length };
+}
