@@ -1,0 +1,908 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sage engine API v1.0.0",
+  "version": "1.0.0",
+  "methods": {
+    "session.create": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "object",
+            "properties": {
+              "objective": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 2000
+              },
+              "mode": {
+                "enum": [
+                  "cram",
+                  "learn",
+                  "drill",
+                  "accelerate"
+                ]
+              },
+              "pace": {
+                "enum": [
+                  "normal",
+                  "speed_up"
+                ]
+              },
+              "timeBudgetMin": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 1440
+              },
+              "horizonDays": {
+                "type": "number"
+              },
+              "allowedAids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "accommodations": {
+                "type": "string"
+              },
+              "learnerParams": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "sourceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "exam": {
+                "type": "object"
+              },
+              "preview": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "objective"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "goal"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "session.list": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "session.resume": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "takeLease": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "session.end": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true,
+      "note": "checkpoint + release lease (engine control.stop)"
+    },
+    "plan.get": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "plan.edit": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "plan": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "sessionId",
+          "plan"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "plan.approve": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "diagnostic.skip": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "control.teach": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "control.morePractice": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "control.advance": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "control.leaveWithGaps": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confirmToken": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "control.stop": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "control.resume": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "item.submit": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "choice": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fields": {
+            "type": "object"
+          },
+          "latencyMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "hint.request": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "level": {
+            "enum": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "level"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "chunk.peek": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "feedback.ack": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attemptId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId",
+          "attemptId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "grade.dispute": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attemptId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "argument": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "sessionId",
+          "attemptId",
+          "argument"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "pace.set": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pace": {
+            "enum": [
+              "normal",
+              "speed_up"
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "pace"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "time.extend": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minutes": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 600
+          }
+        },
+        "required": [
+          "sessionId",
+          "minutes"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "reviews.consent": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subskillIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "subskillIds"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "state.get": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "context.inspect": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true,
+      "note": "dev: the tutor packet as it would be built now"
+    },
+    "research.status": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "research.pack": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "packId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId",
+          "packId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "sources.acceptPack": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "packId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "packId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "settings.get": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "settings.set": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "roleModels": {
+            "type": "object"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true
+    },
+    "usage.get": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": true
+    },
+    "turn.send": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "free-text turn to the tutor (needs an engine event)"
+    },
+    "image.consent": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M5"
+    },
+    "transcription.confirm": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M5"
+    },
+    "export.get": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": false,
+      "note": "M4"
+    },
+    "sources.add": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "sources.preview": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": false,
+      "note": "M6"
+    },
+    "sources.accept": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "sources.remove": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "sources.list": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": false,
+      "note": "M6"
+    },
+    "brain.get": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": false,
+      "note": "Phase 2"
+    },
+    "brain.set": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "Phase 2"
+    },
+    "usage.set": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M4"
+    },
+    "extensions.list": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": false,
+      "implemented": false,
+      "note": "M6"
+    },
+    "extensions.install": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "extensions.enable": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "extensions.disable": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "extensions.update": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "extensions.importFromPi": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "M6"
+    },
+    "ui.respond": {
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": false,
+      "note": "no pi dialogs reach the client (pi no-op UI)"
+    }
+  },
+  "events": [
+    "tutor.done",
+    "item.present",
+    "grade.result",
+    "feedback.present",
+    "repair.required",
+    "hint.reveal",
+    "gate.update",
+    "node.status",
+    "pace.notice",
+    "confirm.required",
+    "plan.changed",
+    "notice",
+    "research.started",
+    "research.ready",
+    "cost.update",
+    "export.ready",
+    "checkpoint",
+    "error",
+    "dev.item_rejected"
+  ]
+}

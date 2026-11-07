@@ -58,3 +58,14 @@ export async function loadPiWithFallback(paths: SagePaths): Promise<{ sdk: PiSdk
     catch { await resetPi(paths); return { sdk: (await loadPi(paths)).sdk, notice: `Selected pi failed to load (${why}); switched to the bundled pi.` }; }
   }
 }
+
+/** The one extension bundled for everyone (owner M2). Extensions run with OS privileges; an isolated home is not a sandbox. */
+export const WEB_ACCESS = "npm:pi-web-access@0.44.0";
+export async function provisionWebAccess(paths: SagePaths): Promise<string | undefined> {
+  const { sdk } = await loadPiWithFallback(paths);
+  await mkdir(paths.agent, { recursive: true });
+  const settingsManager = sdk.SettingsManager.inMemory({ enableInstallTelemetry: false, packages: [WEB_ACCESS] } as never, { projectTrusted: false } as never);
+  const pm = new sdk.DefaultPackageManager({ cwd: paths.home, agentDir: paths.agent, settingsManager });
+  await pm.install(WEB_ACCESS);
+  return pm.getInstalledPath(WEB_ACCESS, "user");
+}

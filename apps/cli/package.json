@@ -1,0 +1,1 @@
+{"name":"@sage/cli","private":true,"type":"module","bin":{"sage":"src/sage.ts"}}
