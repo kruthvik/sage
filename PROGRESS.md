@@ -67,7 +67,7 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 ### M3: what exists
 - `packages/agent/src/driver.ts` `SessionDriver`: reducer → ledger (rejected events are never stored) → effects; roles via host; tutor turns; researcher in the background; one automatic retry for a failed role call/tutor turn, then the effect is parked for `session.retry`; `resume` replays the ledger.
 - `apps/server`: `startServer` (127.0.0.1 only, launch token with constant-time compare, Host/Origin must be loopback, one learner lease per session), `schema.ts` (API v1 method table = validator = `docs/api/v1.schema.json`), `console.ts` (throwaway dev console at `/`). `docs/API.md` is the frozen v1 doc; reserved methods answer `1003`.
-- `apps/cli/src/sage.ts`: `serve [--port] [--pi-agent-dir DIR]`, `setup` (installs pi-web-access into Sage's agent dir; verified live), `update [VERSION|--rollback|--reset]`, `schema`, `models`.
+- `apps/cli/src/sage.ts`: `serve [--port]`, `setup [--provider PKG]`, `login`, `update [VERSION|--rollback|--reset]`, `schema`, `models`. Sage's own agent dir only (see M3 review).
 - `packages/eval/src/cram-eval.ts`: 5 Cram units (math, biology, history, Spanish, first aid = non-academic), simulated learner (flash, fixed knowledge profile), virtual clock, adaptive vs fixed baseline (real planner/generator/grader; deterministic non-adaptive tutor from `fake-runtime.ts`). Writes `eval/CRAM_EVAL.md`.
 
 ### Bugs the M3 eval found (all fixed, with regression tests)
@@ -79,6 +79,14 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - Run 3 hit "Codex error: The usage limit has been reached" 6× (the owner's openai-codex quota, which serves sol), plus the researcher's JSON failure every session. Numbers are contaminated; no unit passed a node within its 30-min budget. calc/adaptive passed its first node at 32 min (first real pass, after fixes 1–3).
 - Across runs, adaptive vs baseline: adaptive learners scored higher (mean 62–94 vs 34–75) and far more of their answers counted as independent (~75–95% vs ~15–35%). Adaptive cost $0.20–0.78 per session-hour; baseline $0.02–0.25.
 - Open, needs owner: (a) generated numeric keys are not verified (one calc key was wrong: 5 where the answer is 0) and deterministic items can't be disputed, so a wrong key can block a node. Options: allow `grade.dispute` on numeric/exact items (model re-checks key vs working) or a key-check pass per bank. (b) The planner makes 4–6 nodes for a 30-min Cram while a Cram node needs recall + explanation/selection + changed application at K=2 plus a 5-item check (~15+ learner-minutes/node): budget/plan size mismatch is a pedagogy call. (c) Researcher (flash) never returned parseable JSON in the eval; it's background-only but currently produces no packs. (d) Baseline's fake tutor sometimes can't act (`tutor_failed`), which shortens baseline runs; fix before the baseline comparison is quoted.
+
+### M3 review changes (owner, 2026-11-07)
+- **Isolation.** `sage setup` installs pi-web-access into `SAGE_HOME/agent` (plus provider packages only when named: `--provider npm:pi-antigravity@0.11.0` for gemini). `sage login` runs Sage's bundled pi against that dir for `/login`. `--pi-agent-dir` is removed; the app never reads ~/.pi. TMP/TEMP/TMPDIR and the npm cache are bound under SAGE_HOME. Verified: a fresh SAGE_HOME through setup → models → serve wrote nothing to ~/.pi, the npm caches, the temp root or the home root (pi's jiti/compile caches landed in `SAGE_HOME/tmp`). Not verified: a real model call from Sage's own dir (needs the owner's login there).
+- **Key check (b).** Every generated numeric/choice/exact key is solved blind by the `checker` role (flash): the solver's arithmetic expression is evaluated in code when it gives one, else its answer is used. Disagreement or "ambiguous" → that item is regenerated once; still disagreeing → dropped. `packages/agent/src/keycheck.ts`.
+- **Key disputes (a).** `grade.dispute` on an answer-key item (while its feedback shows) → grader re-checks key vs working. Wrong key → item voided (never evidence, never shown), all attempts re-scored against the corrected key (kept, not evidence), cue ladders dropped, replacement generated (`bank_generated` purpose `replace`). Key stands → notice with the reason.
+- **Plan fit.** Node minutes come from the gate (ED-29 constants: per-dimension item minutes, chunk, node-check item, retry factor), not the planner. `plan.fit` at proposal/merge/pace/time changes: when over budget it offers extend to N min, `plan.merge` of adjacent pairs, or Speed-up, each with its estimate. Gate unchanged. ED-29 numbers are guesses to recalibrate from real sessions.
+- **Researcher** returns its pack through a `submit_pack` tool call with a JSON schema (pi validates the arguments), not prose JSON. Untested live yet.
+- **Flash as grader:** fails the A1–A10 gate at default reasoning (MAE 8.8) and at medium (MAE 8.7, signed −0.5). The misses are the same two anchors both times: A7 (target 55, flash 25) and A8 (target 65, flash 88). sol passes (MAE 5.5). High reasoning was started but stopped unfinished.
 
 ## Research findings worth knowing
 
@@ -123,9 +131,9 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. **Owner:** run one real Cram session: `bun run sage serve --pi-agent-dir ~/.pi/agent`, open the printed dev-console URL. Wait for the Codex usage limit to reset first. Decide open items (a)–(b) above.
-2. Fix the researcher's JSON output (inspect a raw final message; likely flash ends with prose) and the fake baseline tutor's `tutor_failed` cases; then rerun `cram-eval.ts` once quota allows and quote the adaptive-vs-baseline table.
-3. M4 (exports) only after the owner's go-ahead.
+1. **Owner:** `bun run sage setup --provider npm:pi-antigravity@0.11.0`, then `bun run sage login` and `/login antigravity` (and `/login` for openai-codex if you want sol) inside Sage's dir. Then the all-flash Cram eval can run from Sage's own dir, and your real session: `bun run sage serve`.
+2. Run the all-flash Cram eval at 90–120 min budgets from Sage's own agent dir (`EVAL_MODEL=antigravity/gemini-3.8-flash bun packages/eval/src/cram-eval.ts`, no SAGE_EVAL_AGENT_DIR) and quote the table; check the researcher's submit_pack and the key-check drop rate in it.
+3. Owner decision: grader on flash fails the gate (A7/A8). Keep sol as grader, or work on flash grading (A7/A8 pattern), before M4.
 
 ## Commands
 
@@ -135,10 +143,10 @@ bun test               # all unit + persona tests
 bun run typecheck
 bun run eval           # writes eval/REPORT.md
 bun run eval:smoke     # persona tests only
-# real models (dev opt-in; reads ~/.pi/agent in place, copies nothing):
-SAGE_EVAL_AGENT_DIR=~/.pi/agent bun packages/eval/calibration/run-grader.ts openai-codex/gpt-6.1-sol 2
-SAGE_EVAL_AGENT_DIR=~/.pi/agent STRONG=openai-codex/gpt-6.1-sol CHEAP=antigravity/gemini-3.8-flash bun packages/eval/src/live-probe.ts "<objective>"
-SAGE_EVAL_AGENT_DIR=~/.pi/agent bun packages/eval/src/cram-eval.ts [calc,resp,…] [--adaptive-only|--baseline-only]
-bun run sage serve --pi-agent-dir ~/.pi/agent   # real session; prints the dev console URL
-bun run sage setup                               # install pi-web-access into Sage's own agent dir
+bun run sage setup [--provider npm:pi-antigravity@0.11.0]   # packages into SAGE_HOME/agent only
+bun run sage login                                          # pi /login inside SAGE_HOME/agent
+bun run sage serve                                          # real session; prints the dev console URL
+# real-model dev scripts use Sage's own agent dir; [REASONING=medium] for calibration variants
+bun packages/eval/calibration/run-grader.ts antigravity/gemini-3.8-flash 2
+EVAL_MODEL=antigravity/gemini-3.8-flash bun packages/eval/src/cram-eval.ts [calc,resp,…] [--adaptive-only|--baseline-only]
 ```
