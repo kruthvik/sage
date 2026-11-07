@@ -32,16 +32,18 @@ export const SAGE_TOOLS: SageTool[] = [
       return "error: give either itemId, or text with subskillIds";
     } },
   { name: "activity", label: "Activity", endsTurn: true,
-    description: `Write and present one ad hoc practice item when no unused bank item fits. activityType and evidences must match: ${Object.entries(ACTIVITY_EVIDENCE).map(([a, d]) => `${a}→${d.join("/")}`).join("; ")}. MCQ needs choices, key {kind:"choice",index}, distractorRationales; open answers need a rubric (2-4 criteria) and key {kind:"reference",text}.`,
+    description: `Write and present one ad hoc practice item when no unused bank item fits. activityType and evidences must match: ${Object.entries(ACTIVITY_EVIDENCE).map(([a, d]) => `${a}→${d.join("/")}`).join("; ")}. MCQ needs choices, key {kind:"choice",index}, distractorRationales; open answers need a rubric (2-4 criteria) and key {kind:"reference",text}. For vary_application: activityType apply_problem, evidences ["changed_application"], and variation {baselineItemId: an item the learner already did, changedDimensions: what changed (context, representation, format, structure or cueing; never only surface), invariant: the skill that stays the same}.`,
     parameters: obj({ activityType: { type: "string", enum: Object.keys(ACTIVITY_EVIDENCE) }, subskillIds: SA, evidences: SA, stem: S, difficulty: { type: "integer", minimum: 1, maximum: 5 },
-      choices: SA, key: { type: "object" }, rubric: SA, distractorRationales: SA, hints: SA }, ["activityType", "subskillIds", "evidences", "stem"]),
+      choices: SA, key: { type: "object" }, rubric: SA, distractorRationales: SA, hints: SA,
+      variation: obj({ baselineItemId: S, changedDimensions: { type: "array", items: { type: "string", enum: ["surface", "representation", "context", "cueing", "format", "structure"] } }, invariant: S }, ["baselineItemId", "changedDimensions", "invariant"]) }, ["activityType", "subskillIds", "evidences", "stem"]),
     run: (p, b) => {
       const s = b.state(), id = `adhoc-${s.items.size + 1}`;
       const item: Item = { id, nodeId: s.activeNodeId ?? "", subskillIds: p.subskillIds as string[], activityType: p.activityType as ActivityType, difficulty: Math.min(5, Math.max(1, Number(p.difficulty) || 2)) as Item["difficulty"],
         partition: "practice", familyId: `${id}.f`, evidences: p.evidences as Item["evidences"], stem: String(p.stem),
         ...(Array.isArray(p.choices) ? { choices: p.choices as string[] } : {}), ...(p.key && typeof p.key === "object" ? { key: p.key as Item["key"] } : {}),
         ...(Array.isArray(p.rubric) ? { rubric: p.rubric as string[] } : {}), ...(Array.isArray(p.distractorRationales) ? { distractorRationales: p.distractorRationales as string[] } : {}),
-        ...(Array.isArray(p.hints) && p.hints.length === 3 ? { hints: p.hints as [string, string, string] } : {}) };
+        ...(Array.isArray(p.hints) && p.hints.length === 3 ? { hints: p.hints as [string, string, string] } : {}),
+        ...(p.variation && typeof p.variation === "object" ? { variation: p.variation as NonNullable<Item["variation"]> } : {}) };
       return b.dispatch({ type: "item_presented", itemId: id, adhoc: item }) ?? ok(b, `ad hoc item ${id} shown; the learner answers next`);
     } },
   { name: "propose", label: "Propose hypothesis", endsTurn: false, description: "Adapt phase: record a hypothesis about a specific misconception, citing attempt ids. Does not end the adapt phase; still select a move after.",

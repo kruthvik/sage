@@ -46,7 +46,8 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
       if (fx.purpose === "node") {
         const n = fx.input.node as PlanNode;
         const batches = await Promise.all(BANK_SPLIT.map(([partition, count], k) => call("generator", GENERATOR_SYSTEM,
-          generatorUser({ ...fx.input, size: undefined, partition, count, note: `Write exactly ${count} ${partition} items.` }),
+          generatorUser({ ...fx.input, size: undefined, partition, count, note: `Write exactly ${count} ${partition} items.${partition !== "teaching" && ["cram", "accelerate", "learn"].includes(s.goal?.mode)
+            ? ` This mode requires transfer: for each subskill, include one apply_problem with evidences ["changed_application"] and a variation whose baselineItemId is another item id in this same reply, changing context, representation, format or structure (not only surface).` : ""}` }),
           t => parseItems(t, n.id, `${pfx}${"tpa"[k]}`))));
         out.push({ actor: "role", event: { type: "bank_generated", purpose: "node", nodeId: n.id, items: batches.flat() } });
       } else if (fx.purpose === "diagnostic") {

@@ -40,13 +40,15 @@ export function buildPacket(s: EngineState, candidates: Candidate[], task: strin
   const src = sources ? `## Accepted sources (cite by id)\n${sources}` : "";
 
   // Under pressure drop lowest priority first: bank list shrinks, then sources, then evidence detail.
-  const assemble = (n: number, withSrc: boolean, withEv: boolean) => [card, now, withEv ? evidence : "", hyp, cands, pool(n), withSrc ? src : "", `## Task\n${task}`].filter(Boolean).join("\n\n");
+  const done = [...s.deliveredAt.keys()].filter(id => s.items.get(id)?.nodeId === node?.id).slice(-5);
+  const delivered = done.length ? `## Items the learner already did (baselines for variations)\n${done.map(id => { const i = s.items.get(id)!; return `- ${id} ${i.activityType} → ${i.subskillIds.join(",")}: ${clip(i.stem, 100)}`; }).join("\n")}` : "";
+  const assemble = (n: number, withSrc: boolean, withEv: boolean) => [card, now, withEv ? evidence : "", hyp, cands, pool(n), delivered, withSrc ? src : "", `## Task\n${task}`].filter(Boolean).join("\n\n");
   let dynamic = assemble(10, true, true);
   for (const [n, withSrc, withEv, note] of [[5, true, true, "bank list shortened"], [3, false, true, "sources (use context)"], [2, false, false, "attempt detail (use context)"]] as const) {
     if (prefix.length + dynamic.length <= maxChars) break;
     dynamic = assemble(n, withSrc, withEv); omitted.push(note);
   }
-  if (omitted.length) dynamic += `\n\nOmitted for space: ${omitted.join("; ")}.`;
+  if (omitted.length) dynamic = `Omitted for space: ${omitted.join("; ")}.\n\n${dynamic}`; // first, so a final clip can never hide it
   if (prefix.length + dynamic.length > maxChars) dynamic = clip(dynamic, Math.max(500, maxChars - prefix.length));
   return { prefix, dynamic, chars: prefix.length + dynamic.length, omitted };
 }
