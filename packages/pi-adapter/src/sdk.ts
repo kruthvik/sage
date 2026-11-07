@@ -11,7 +11,7 @@ export type SagePaths = ReturnType<typeof sagePaths>;
 export interface PiSelection { install: string; version: string; previous?: { install: string; version: string } }
 
 /** What Sage actually calls. A pi release missing any of these is refused, and the previous runtime stays active. */
-export const REQUIRED_EXPORTS = ["createAgentSessionServices", "createAgentSessionFromServices", "createAgentSessionRuntime", "SettingsManager", "SessionManager", "DefaultResourceLoader", "DefaultPackageManager"] as const;
+export const REQUIRED_EXPORTS = ["createAgentSessionServices", "createAgentSessionFromServices", "createAgentSessionRuntime", "SettingsManager", "SessionManager", "DefaultResourceLoader", "DefaultPackageManager", "defineTool"] as const;
 
 export const piRuntimeRoot = (paths: SagePaths) => join(paths.home, "pi-runtime");
 export const piSelectionPath = (paths: SagePaths) => join(piRuntimeRoot(paths), "active.json");

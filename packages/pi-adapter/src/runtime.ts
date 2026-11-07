@@ -1,7 +1,8 @@
 // Isolated pi runtime + the one-shot role transport (SPEC §12.1, §13). Ported in spirit from v3 packages/pi/src/{runtime,planner}.ts:
 // v3 ran a tool-less child session per role call; pi 1.5's ModelRuntime.complete() gives the same single request with less machinery.
 import { mkdirSync } from "node:fs";
-import { loadPi, type PiSdk, type SagePaths } from "./sdk.ts";
+import { type PiSdk, type SagePaths } from "./sdk.ts";
+import { loadPiWithFallback } from "./update.ts";
 
 export interface SageRuntimeOptions {
   paths: SagePaths;
@@ -14,12 +15,16 @@ export interface SageRuntimeOptions {
 export interface RoleCallInput { provider: string; model: string; system: string; user: string; maxTokens?: number; timeoutMs?: number; signal?: AbortSignal; /** Provider-neutral reasoning level; omitted ⇒ provider default (the grader was calibrated with the default). */ reasoning?: "minimal" | "low" | "medium" | "high" }
 export interface RoleCallResult { text: string; stopReason: string; usage: { input: number; output: number; costUsd: number | "unknown" }; provider: string; model: string; ms: number }
 
+/** Structural copy of sage-extension's SageTool, bound to a bridge (pi-adapter never imports Sage packages above core). */
+export interface TutorTool { name: string; label: string; description: string; parameters: Record<string, unknown>; endsTurn: boolean; run(params: Record<string, unknown>): string }
+export interface TutorTurnResult { ended: boolean; calls: { name: string; params: Record<string, unknown>; result: string }[]; text: string; usage: RoleCallResult["usage"]; ms: number }
+
 export const ROLE_MAX_OUTPUT_TOKENS = 4096;
 export const ROLE_DEADLINE_MS = 60_000;
 export const ROLE_MAX_INPUT_CHARS = 32_768;
 
 export async function createSageRuntime(opts: SageRuntimeOptions) {
-  const { sdk } = await loadPi(opts.paths);
+  const { sdk, notice } = await loadPiWithFallback(opts.paths);
   const agentDir = opts.agentDir ?? opts.paths.agent;
   mkdirSync(agentDir, { recursive: true });
   process.env.PI_CODING_AGENT_DIR = agentDir; // process-local binding (v3): pi helpers resolve Sage's dir, not ~/.pi
@@ -61,13 +66,14 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
   // Researcher (owner reply 2): the only role with tools — pi-web-access search/fetch, hard-capped by a blocking hook.
   let researchServices: Promise<Awaited<ReturnType<PiSdk["createAgentSessionServices"]>>> | undefined;
   let budget = { searches: 0, fetches: 0, limits: { maxSearches: 6, maxFetches: 6 } };
+  let researchSystem = "";
   let queue: Promise<unknown> = Promise.resolve(); // shortcut: research calls run one at a time so the budget counter is per call; parallelise if packs queue up
   function researchCall(input: RoleCallInput & { system: string; limits: { maxSearches: number; maxFetches: number } }): Promise<RoleCallResult & { searches: number; fetches: number }> {
     const run = async () => {
       researchServices ??= sdk.createAgentSessionServices({
         cwd: opts.paths.home, agentDir, settingsManager,
         resourceLoaderOptions: { noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-          systemPromptOverride: () => input.system, appendSystemPromptOverride: () => [],
+          systemPromptOverride: () => researchSystem, appendSystemPromptOverride: () => [],
           extensionFactories: [{ name: "sage-research-limits", factory: pi => {
             pi.on("tool_call", ev => {
               const name = (ev as { toolName: string }).toolName;
@@ -81,7 +87,7 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
       const svc = await researchServices;
       const model = svc.modelRuntime.getModel(input.provider, input.model);
       if (!model) throw new Error(`model ${input.provider}/${input.model} is not available; check settings or auth`);
-      budget = { searches: 0, fetches: 0, limits: input.limits };
+      budget = { searches: 0, fetches: 0, limits: input.limits }; researchSystem = input.system;
       const { session } = await sdk.createAgentSessionFromServices({ services: svc, sessionManager: sdk.SessionManager.inMemory(opts.paths.home), model,
         tools: ["web_search", "fetch_content", "get_search_content"] });
       const timer = setTimeout(() => void session.abort(), input.timeoutMs ?? 4 * ROLE_DEADLINE_MS);
@@ -107,7 +113,47 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
     return p;
   }
 
+  // Tutor: one fresh pi session per turn (the packet carries context, so history never grows), only Sage's tools active.
+  let tutorServices: Promise<Awaited<ReturnType<PiSdk["createAgentSessionServices"]>>> | undefined;
+  let tutorSystem = "";
+  async function tutorTurn(input: Omit<RoleCallInput, "system"> & { system: string; tools: TutorTool[]; active: readonly string[] }): Promise<TutorTurnResult> {
+    tutorSystem = input.system;
+    tutorServices ??= sdk.createAgentSessionServices({ cwd: opts.paths.home, agentDir, settingsManager,
+      resourceLoaderOptions: { noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, systemPromptOverride: () => tutorSystem, appendSystemPromptOverride: () => [] } });
+    const svc = await tutorServices;
+    const model = svc.modelRuntime.getModel(input.provider, input.model);
+    if (!model) throw new Error(`model ${input.provider}/${input.model} is not available; check settings or auth`);
+    const calls: TutorTurnResult["calls"] = [];
+    let ended = false;
+    const customTools = input.tools.filter(t => input.active.includes(t.name)).map(t => sdk.defineTool({
+      name: t.name, label: t.label, description: t.description, parameters: t.parameters as never,
+      async execute(_id, params) {
+        let text: string;
+        if (ended && t.endsTurn) text = "error: this turn already ended; stop now";
+        else { text = t.run(params as Record<string, unknown>); if (t.endsTurn && text.startsWith("ok")) ended = true; }
+        calls.push({ name: t.name, params: params as Record<string, unknown>, result: text });
+        return { content: [{ type: "text" as const, text }], details: undefined };
+      },
+    }));
+    const { session } = await sdk.createAgentSessionFromServices({ services: svc, sessionManager: sdk.SessionManager.inMemory(opts.paths.home), model,
+      customTools: customTools as never, tools: [...input.active], ...(input.reasoning ? { thinkingLevel: input.reasoning as never } : {}) });
+    const timer = setTimeout(() => void session.abort(), input.timeoutMs ?? 2 * ROLE_DEADLINE_MS);
+    const relay = () => void session.abort();
+    input.signal?.addEventListener("abort", relay, { once: true });
+    const started = Date.now();
+    try {
+      const extra = session.getActiveToolNames().filter(n => !input.active.includes(n));
+      if (extra.length) throw new Error(`tutor isolation check failed: unexpected tools ${extra.join(", ")}`);
+      await session.prompt(input.user, { expandPromptTemplates: false, source: "extension" } as never);
+      const msgs = session.messages.filter(m => m.role === "assistant") as { content: { type: string; text?: string }[]; usage?: { input: number; output: number; cost?: { total?: number } } }[];
+      const usage = msgs.reduce((a, m) => ({ input: a.input + (m.usage?.input ?? 0), output: a.output + (m.usage?.output ?? 0),
+        costUsd: typeof m.usage?.cost?.total === "number" && a.costUsd !== "unknown" ? a.costUsd + m.usage.cost.total : "unknown" as const }), { input: 0, output: 0, costUsd: 0 as number | "unknown" });
+      const text = msgs.at(-1)?.content.filter(p => p.type === "text").map(p => p.text ?? "").join("\n") ?? "";
+      return { ended, calls, text, usage, ms: Date.now() - started };
+    } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", relay); session.dispose(); }
+  }
+
   const available = async () => (await models.getAvailable()).map(m => `${m.provider}/${m.id}`);
-  return { sdk, services, agentDir, roleCall, researchCall, available, diagnostics: services.diagnostics };
+  return { sdk, services, agentDir, roleCall, researchCall, tutorTurn, available, diagnostics: services.diagnostics, piNotice: notice };
 }
 export type SageRuntime = Awaited<ReturnType<typeof createSageRuntime>>;
