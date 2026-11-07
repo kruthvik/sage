@@ -16,8 +16,8 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 |---|---|---|
 | M0 Orientation ◆ | done; batch 1 answered | n/a (docs only) |
 | M1 Pure engine + ledger | **done** | `bun test`: 36 pass · `tsc` clean · `bun run eval` all 6 personas, 0 reducer errors |
-| M2 Agent layer ◆ | **done** except the owner's default-model answer: pi runtime + role transport + researcher session, `packages/agent` (grader, roles, host, packet, tutor), `packages/sage-extension`, `sage update` | `bun test`: 63 pass · `tsc` clean · grader calibration A1–A10 **PASS** on gpt-6.1-sol · live probe plan→bank→pack→tutor turn · commits `4c1339e`, `6c2c22c`, `38463fb` |
-| M3 Server/API/dev console ◆ | not started | |
+| M2 Agent layer ◆ | **done**; owner chose role defaults (sol: planner/tutor/grader; flash: generator/feynman/summarizer/researcher) | `bun test` 63 pass · grader A1–A10 PASS on sol · commits `4c1339e`…`a25f576` |
+| M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
 | M4 Exports | not started | |
 | M5 Activities ◆ | not started | |
 | M6 Integrations | not started | |
@@ -64,6 +64,22 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
   - The prompt fix that moved sol from FAIL (MAE 9.3, A8 +35) to PASS was general examiner reading of "specific", "follows from" and "clear claim", not anchor-specific text.
 - Live probe ("Pass a beginner sourdough bread practical next week", sol planner + flash generator/researcher): 8-node plan with honest text proxies on every physical subskill; 12/12 bank items accepted by the engine validator after the prompt states the activity→evidence table and MCQ key shape; researcher returned 7 cited sources in 82 s (flash, keyless); first tutor turn reached. Whole run $0.04.
 
+### M3: what exists
+- `packages/agent/src/driver.ts` `SessionDriver`: reducer → ledger (rejected events are never stored) → effects; roles via host; tutor turns; researcher in the background; one automatic retry for a failed role call/tutor turn, then the effect is parked for `session.retry`; `resume` replays the ledger.
+- `apps/server`: `startServer` (127.0.0.1 only, launch token with constant-time compare, Host/Origin must be loopback, one learner lease per session), `schema.ts` (API v1 method table = validator = `docs/api/v1.schema.json`), `console.ts` (throwaway dev console at `/`). `docs/API.md` is the frozen v1 doc; reserved methods answer `1003`.
+- `apps/cli/src/sage.ts`: `serve [--port] [--pi-agent-dir DIR]`, `setup` (installs pi-web-access into Sage's agent dir; verified live), `update [VERSION|--rollback|--reset]`, `schema`, `models`.
+- `packages/eval/src/cram-eval.ts`: 5 Cram units (math, biology, history, Spanish, first aid = non-academic), simulated learner (flash, fixed knowledge profile), virtual clock, adaptive vs fixed baseline (real planner/generator/grader; deterministic non-adaptive tutor from `fake-runtime.ts`). Writes `eval/CRAM_EVAL.md`.
+
+### Bugs the M3 eval found (all fixed, with regression tests)
+1. `drain()` on an empty queue left a stale resolved promise → later grades never ran (sessions stalled in `grading`).
+2. The Cram gate was unreachable: the tutor's `activity` tool had no `variation` field and generator banks had no variation items, so `changed_application` could never be observed (learner scored 100 on 30 straight items and never passed node 1).
+3. Numeric keys were graded on the **first** number in a worked answer (`… = 96 - 20 + 6 = 82` graded as 24) → correct node-check answers scored 0.
+
+### M3 eval status (last run, `eval/CRAM_EVAL.md`): **not a valid result yet**
+- Run 3 hit "Codex error: The usage limit has been reached" 6× (the owner's openai-codex quota, which serves sol), plus the researcher's JSON failure every session. Numbers are contaminated; no unit passed a node within its 30-min budget. calc/adaptive passed its first node at 32 min (first real pass, after fixes 1–3).
+- Across runs, adaptive vs baseline: adaptive learners scored higher (mean 62–94 vs 34–75) and far more of their answers counted as independent (~75–95% vs ~15–35%). Adaptive cost $0.20–0.78 per session-hour; baseline $0.02–0.25.
+- Open, needs owner: (a) generated numeric keys are not verified (one calc key was wrong: 5 where the answer is 0) and deterministic items can't be disputed, so a wrong key can block a node. Options: allow `grade.dispute` on numeric/exact items (model re-checks key vs working) or a key-check pass per bank. (b) The planner makes 4–6 nodes for a 30-min Cram while a Cram node needs recall + explanation/selection + changed application at K=2 plus a 5-item check (~15+ learner-minutes/node): budget/plan size mismatch is a pedagogy call. (c) Researcher (flash) never returned parseable JSON in the eval; it's background-only but currently produces no packs. (d) Baseline's fake tutor sometimes can't act (`tutor_failed`), which shortens baseline runs; fix before the baseline comparison is quoted.
+
 ## Research findings worth knowing
 
 - Nothing in `outputs/` contradicts a spec mechanism.
@@ -107,9 +123,9 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. Owner: choose the default model per role (asked after M2). Then wire them as `RoleModels` defaults in settings (user-selectable, no Claude defaults).
-2. M3: `packages/agent/src/driver.ts` (session driver: ledger append per event, effect loop, background researcher, tutor turns, learner actions) + `apps/server` (`sage serve`: loopback WebSocket JSON-RPC, launch token, tutor lease) + API v1 JSON Schemas frozen in `docs/API.md` + throwaway dev console + `sage update` CLI.
-3. M3: simulated-learner eval on ≥5 Cram units from different domains (≥1 non-academic) with the real roles + fixed-baseline comparison; then STOP for the owner's real Cram session.
+1. **Owner:** run one real Cram session: `bun run sage serve --pi-agent-dir ~/.pi/agent`, open the printed dev-console URL. Wait for the Codex usage limit to reset first. Decide open items (a)–(b) above.
+2. Fix the researcher's JSON output (inspect a raw final message; likely flash ends with prose) and the fake baseline tutor's `tutor_failed` cases; then rerun `cram-eval.ts` once quota allows and quote the adaptive-vs-baseline table.
+3. M4 (exports) only after the owner's go-ahead.
 
 ## Commands
 
@@ -122,4 +138,7 @@ bun run eval:smoke     # persona tests only
 # real models (dev opt-in; reads ~/.pi/agent in place, copies nothing):
 SAGE_EVAL_AGENT_DIR=~/.pi/agent bun packages/eval/calibration/run-grader.ts openai-codex/gpt-6.1-sol 2
 SAGE_EVAL_AGENT_DIR=~/.pi/agent STRONG=openai-codex/gpt-6.1-sol CHEAP=antigravity/gemini-3.8-flash bun packages/eval/src/live-probe.ts "<objective>"
+SAGE_EVAL_AGENT_DIR=~/.pi/agent bun packages/eval/src/cram-eval.ts [calc,resp,…] [--adaptive-only|--baseline-only]
+bun run sage serve --pi-agent-dir ~/.pi/agent   # real session; prints the dev console URL
+bun run sage setup                               # install pi-web-access into Sage's own agent dir
 ```
