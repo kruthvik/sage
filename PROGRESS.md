@@ -16,7 +16,7 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 |---|---|---|
 | M0 Orientation ◆ | done; batch 1 answered | n/a (docs only) |
 | M1 Pure engine + ledger | **done** | `bun test`: 36 pass · `tsc` clean · `bun run eval` all 6 personas, 0 reducer errors |
-| M2 Agent layer ◆ | **in progress**: pi adapter `sdk.ts` (1.5.0); calibration set (10 owner anchors + 20 unreviewed triples, 9 domains) + `calibrate()` harness; engine researcher hooks + Cram metrics | `bun test`: 51 pass · `tsc` clean · commits `c10e2c4`, `bd6f4dc` + calibration commit |
+| M2 Agent layer ◆ | **done** except the owner's default-model answer: pi runtime + role transport + researcher session, `packages/agent` (grader, roles, host, packet, tutor), `packages/sage-extension`, `sage update` | `bun test`: 63 pass · `tsc` clean · grader calibration A1–A10 **PASS** on gpt-6.1-sol · live probe plan→bank→pack→tutor turn · commits `4c1339e`, `6c2c22c`, `38463fb` |
 | M3 Server/API/dev console ◆ | not started | |
 | M4 Exports | not started | |
 | M5 Activities ◆ | not started | |
@@ -42,6 +42,27 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - The tutor may present only `practice` items or validated ad hoc items. `teaching` items go in chunks as worked examples; `assessment` items are engine-only.
 - A chunk that carries a worked example may run to 2× the word cap (`shortcut:` comment in `loop.ts`).
 - Not yet built: blob store, backup/restore port, image/scrap intake (rejected until M5), node-check top-up when the bank has fewer assessment items than the check size (it uses what's there).
+
+### M2: what exists
+- `packages/pi-adapter/src/runtime.ts`: `createSageRuntime` builds one isolated runtime (Sage's agent dir, `PI_CODING_AGENT_DIR` bound, in-memory settings: telemetry off, compaction off, untrusted project; no skills, prompt templates, themes or context files). `roleCall` = one `ModelRuntime.complete` request, ≤4,096 output tokens, 60 s, cancelable; rejects tool calls, empty and truncated (`length`) replies; optional `reasoning` level (via `completeSimple`). `researchCall` = a pi session with only `web_search`/`fetch_content`/`get_search_content`, a blocking `tool_call` hook at 6/6, serialised. `tutorTurn` = a fresh pi session per turn with only the phase's Sage tools; isolation check rejects any other active tool.
+- `packages/pi-adapter/src/update.ts`: `updatePi` (install to fresh `install-<uuid>` with `bun add`, validate exports, smoke, atomic `active.json` rename with `previous`), `rollbackPi`, `resetPi`, `loadPiWithFallback` (offline startup: a broken selection rolls back with a notice). CLI wiring comes with M3.
+- `packages/agent`: `grader.ts` (model judges criterion credit 0/.25/.5/.75/1 + flaws; **code** computes the score: mean credit − precision on met criteria only (5–10) − min(polish, 4)); `roles.ts` (planner, generator, feynman, summarizer, researcher prompts + strict parsers, all domain-neutral); `host.ts` (`runRole`: effect → calls → events, one retry on unparseable JSON, node bank split into teaching 3 / practice 5 / assessment 4 so each call fits 4k output); `packet.ts` (12k cap, cacheable prefix, explicit omissions, never keys/rubrics, `drill(id)`); `tutor.ts` (`runTutorTurn`: one corrective retry, then a labelled deterministic fallback).
+- `packages/sage-extension`: `SAGE_TOOLS` (context, select_move, present, activity, propose, request_research) as plain JSON Schema, and `TUTOR_POLICY` (~600 tokens).
+- `packages/eval/calibration/run-grader.ts` and `packages/eval/src/live-probe.ts`: real-model dev scripts. Credentials: Sage's own agent dir by default; `SAGE_EVAL_AGENT_DIR=~/.pi/agent` is an explicit opt-in that reads the owner's pi dir **in place** (nothing copied) and loads only the packages for the named providers plus pi-web-access.
+
+### M2 deviations (flag if wrong)
+- **No `ui-bridge.ts`.** pi 1.5 has 42 `ctx.ui` methods (not 27) and a built-in no-op UI whose `hasUI()` is false. Extensions check `hasUI()` before opening dialogs; a bridge would make them think a user is present. Headless role and tutor sessions keep pi's no-op UI. Learner interaction goes through the engine API only.
+- Role calls default to the provider's reasoning level. The planner runs at `reasoning: "low"` in the probe because gpt-6.1-sol at default took >60 s for a whole-unit plan (41–52 s at low). The grader keeps the default because that's what was calibrated.
+- Tutor sessions are fresh per **turn**, not per node (spec: per node). The packet already carries the context; per-turn keeps input flat and cacheable. `shortcut:` upgrade to per-node if continuity suffers in the real session.
+
+### M2 findings
+- **Keyless web search works.** Live-probed with all `*KEY*`/`*TOKEN*` env vars removed: Exa MCP (pi-web-access's zero-config default in `auto` mode) ✓ 0.6 s; DuckDuckGo HTML ✓ 1.6 s (explicit `provider: "duckduckgo"` only); public degoog ✓ 2.3 s (explicit only). Content fetch has keyless paths too (local Readability, Jina Reader fallback, local `unpdf` for PDFs). So the researcher needs no key by default.
+- **Grader calibration** (one run per triple ×2 repeats, `eval/CALIBRATION-*.md`):
+  - gpt-6.1-sol: A1–A10 MAE 5.5, mean signed −1.4, no ceiling violations → **PASS**. C01–C20 (unreviewed) MAE 11.8, mean signed −0.1, C11 violates the ceiling → informational only. Cost $0.23 for 60 grades.
+  - gemini-3.8-flash: A1–A10 MAE 8.8, mean signed +0.4 → **FAIL** (A8 +26, A7 −30). C01–C20 MAE 14.1. Cost $0.012 for 60 grades (~19× cheaper).
+  - Biggest remaining misses on the A set: A7 (−22, grader won't credit the implied correction), A9 (+10).
+  - The prompt fix that moved sol from FAIL (MAE 9.3, A8 +35) to PASS was general examiner reading of "specific", "follows from" and "clear claim", not anchor-specific text.
+- Live probe ("Pass a beginner sourdough bread practical next week", sol planner + flash generator/researcher): 8-node plan with honest text proxies on every physical subskill; 12/12 bank items accepted by the engine validator after the prompt states the activity→evidence table and MCQ key shape; researcher returned 7 cited sources in 82 s (flash, keyless); first tutor turn reached. Whole run $0.04.
 
 ## Research findings worth knowing
 
@@ -86,9 +107,9 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. M2: finish `packages/pi-adapter`. Port v3 `packages/pi/src/{runtime,resources,plugins}.ts` (isolated agent dir, `PI_CODING_AGENT_DIR`, no ambient `.pi`/`~/.agents/skills`, telemetry off, auto-compaction off, `pi-web-access` provisioned (NOT pi-subagents: owner reply 2) under Sage's agent dir) and `planner.ts`'s `runBoundedPiChild` as the generic one-shot role transport (≤4,096 output tokens, 60 s, cancelable). Then `ui-bridge.ts`, covering the 27 `ctx.ui` methods listed under Owner decisions. Skip `shared-runtime.ts` (dropped).
-2. M2: `packages/agent`: **domain-neutral** role prompts (planner decomposes *any* topic by what the learner must do, sets `knowledgeConfidence`, `proxyFor` for non-text skills; generator bank; grader with criteria-first partial credit + deductions from `DEDUCTION`; feynman; summarizer; **researcher** using `pi-web-access` tools `web_search` / `fetch_content` / `get_search_content` / `source_check`, which need a provider key (Brave/Exa/Tavily/Perplexity/Gemini/Jina), else unsourced fallback), context packet ≤12,000 chars with drill-down (port v3 `runtime/src/context.ts`), char/token accounting. Then `packages/sage-extension`: phase-scoped tools `context`, `select_move`, `present`, `propose`, `activity`, `request_research` + the short policy.
-3. M2: run the real grader against `calibrate()` (`packages/eval/calibration/set.ts`) with MAE ≤8, mean signed error ≤ +3, nothing with target ≤85 at ≥95. Ask the owner to spot-check C01–C20 (written by Claude, unreviewed). Then M3: 5-domain Cram units (≥1 non-academic) for the simulated-learner eval.
+1. Owner: choose the default model per role (asked after M2). Then wire them as `RoleModels` defaults in settings (user-selectable, no Claude defaults).
+2. M3: `packages/agent/src/driver.ts` (session driver: ledger append per event, effect loop, background researcher, tutor turns, learner actions) + `apps/server` (`sage serve`: loopback WebSocket JSON-RPC, launch token, tutor lease) + API v1 JSON Schemas frozen in `docs/API.md` + throwaway dev console + `sage update` CLI.
+3. M3: simulated-learner eval on ≥5 Cram units from different domains (≥1 non-academic) with the real roles + fixed-baseline comparison; then STOP for the owner's real Cram session.
 
 ## Commands
 
@@ -98,4 +119,7 @@ bun test               # all unit + persona tests
 bun run typecheck
 bun run eval           # writes eval/REPORT.md
 bun run eval:smoke     # persona tests only
+# real models (dev opt-in; reads ~/.pi/agent in place, copies nothing):
+SAGE_EVAL_AGENT_DIR=~/.pi/agent bun packages/eval/calibration/run-grader.ts openai-codex/gpt-6.1-sol 2
+SAGE_EVAL_AGENT_DIR=~/.pi/agent STRONG=openai-codex/gpt-6.1-sol CHEAP=antigravity/gemini-3.8-flash bun packages/eval/src/live-probe.ts "<objective>"
 ```
