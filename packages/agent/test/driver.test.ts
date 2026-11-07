@@ -61,3 +61,14 @@ test("a role call that fails twice is parked; session.retry re-runs it and the s
   expect(d.state.phase).toBe("plan_review");
   expect(await d.retry()).toBe(false);
 });
+
+test("regression: drain() on an empty queue doesn't leave a stale promise that swallows later effects", async () => {
+  const ledger = new Ledger(join(await mkdtemp(join(tmpdir(), "sage-")), "s.sqlite"));
+  const d = SessionDriver.create(goal(), "s4", ledger, fakeRuntime(), DEFAULT_ROLE_MODELS, () => {});
+  await d.idle();
+  expect((d as unknown as { queue: unknown[] }).queue).toHaveLength(0);
+  await d.drain(); // empty queue: what a background research completion does
+  await d.learner({ type: "plan_approved" });
+  expect(d.state.phase).not.toBe("bank"); // the generator call ran
+  expect(d.state.items.size).toBeGreaterThan(0);
+});

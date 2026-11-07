@@ -71,15 +71,21 @@ export class SessionDriver {
 
   /** Process queued effects until the engine waits for the learner (or a background job). Re-entrant calls join the running drain. */
   drain(): Promise<void> {
-    this.draining ??= (async () => {
+    if (this.draining) return this.draining;
+    // The first await matters: with an empty queue a synchronous body would clear `draining` before it is assigned,
+    // leaving a resolved promise that makes every later drain() a no-op.
+    let p: Promise<void> | undefined = undefined;
+    p = (async () => {
+      await null;
       try { while (this.queue.length) await this.handle(this.queue.shift()!); }
-      finally { this.draining = undefined; }
+      finally { if (this.draining === p) this.draining = undefined; }
     })();
-    return this.draining;
+    this.draining = p;
+    return p;
   }
 
   /** Resolves when background research has landed (eval/tests). */
-  async idle(): Promise<void> { while (this.background.size || this.draining) { await Promise.all([...this.background]); await this.draining; } }
+  async idle(): Promise<void> { while (this.queue.length || this.background.size || this.draining) { await this.drain(); await Promise.all([...this.background]); } }
 
   /** The foreground effect that failed after its automatic retry; the session waits on it until retry(). */
   failed: Effect | undefined;
