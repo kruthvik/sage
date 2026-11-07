@@ -93,3 +93,14 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
   }
   return out;
 }
+
+/** Owner defaults (2026-11-07, after calibration). User-selectable in settings; never a Claude model (owner M0). */
+export const DEFAULT_ROLE_MODELS: RoleModels = {
+  planner: { provider: "openai-codex", model: "gpt-6.1-sol", reasoning: "low" }, // default reasoning exceeded the 60 s deadline
+  tutor: { provider: "openai-codex", model: "gpt-6.1-sol" },
+  grader: { provider: "openai-codex", model: "gpt-6.1-sol" },                    // only model passing A1–A10 (MAE 5.5)
+  generator: { provider: "antigravity", model: "gemini-3.8-flash" },
+  feynman: { provider: "antigravity", model: "gemini-3.8-flash" },
+  summarizer: { provider: "antigravity", model: "gemini-3.8-flash" },
+  researcher: { provider: "antigravity", model: "gemini-3.8-flash" },
+};
