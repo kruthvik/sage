@@ -1,4 +1,4 @@
-# Sato
+# Sage
 
 Personal learning engine built on bun and pi's native terminal. It adapts instruction to the learner's goal, actual task evidence, prior help and uncertainty. uses extensive learning research from Feynman with citations in ./outputs.
 
@@ -7,8 +7,8 @@ Personal learning engine built on bun and pi's native terminal. It adapts instru
 Tested on Windows with **Bun 1.4.2** and **Pi 1.0.0**. Doesn't alter the global pi instance and stores information about the custom injection in a .lock file.
 
 ```sh
-git clone https://github.com/kruthvik/sato
-cd sato
+git clone https://github.com/kruthvik/sage
+cd sage
 
 bun install --frozen-lockfile
 bun run dev init
@@ -28,7 +28,7 @@ Inside the native Pi terminal:
 /quit                      Exit
 ```
 
-Live tutoring requires a pi-compatible provider. after intake consent, conversation, relevant learning records, up to 6,000 characters of `brain.md`, and selected source excerpts may go to that provider. Educational records and originals stay local. Pi install telemetry defaults to disabled in sato settings; native pi catalog/version/package checks can still contact Pi services. explicit telemetry settings/environment flags retain pi behavior.
+Live tutoring requires a pi-compatible provider. after intake consent, conversation, relevant learning records, up to 6,000 characters of `brain.md`, and selected source excerpts may go to that provider. Educational records and originals stay local. Pi install telemetry defaults to disabled in sage settings; native pi catalog/version/package checks can still contact Pi services. explicit telemetry settings/environment flags retain pi behavior.
 
 For a working lesson without credentials or model requests:
 
@@ -43,7 +43,7 @@ Run bun link to directly use the `learn` keyword instead of having to use bun ru
 
 ## Records and personalization
 
-`SATO_HOME` overrides `~/.learn`:
+`sage_HOME` overrides `~/.learn`:
 
 ```text
 brain.md                    Learner preferences and constraints
@@ -55,7 +55,7 @@ data/blobs/                 Untouched source originals
 tutor.lock                  One active terminal tutor per home
 ```
 
-Sato does not copy normal Pi credentials or discover invocation `.pi` resources/context. Pi's terminal keybindings, diagnostics and theme helpers also use Sato's agent directory, even if `PI_CODING_AGENT_DIR` points to a global instance. Ambient `~/.agents/skills` are excluded unless explicitly opted into through Sato settings. The model starts with four educational tools plus tools from reviewed installed extensions; Pi's built-in coding tools stay off. User-installed Pi extensions have OS privileges; isolation is not a sandbox.
+sage does not copy normal Pi credentials or discover invocation `.pi` resources/context. Pi's terminal keybindings, diagnostics and theme helpers also use sage's agent directory, even if `PI_CODING_AGENT_DIR` points to a global instance. Ambient `~/.agents/skills` are excluded unless explicitly opted into through sage settings. The model starts with four educational tools plus tools from reviewed installed extensions; Pi's built-in coding tools stay off. User-installed Pi extensions have OS privileges; isolation is not a sandbox.
 
 Pi chooses small instructional moves from scoped evidence: explain unfamiliar work, repair an observed gap, seek independent work after help, fade redundant guidance and sample a useful different form. Planning is delegated at intake and for consequential replanning, not after every answer. The child uses the selected Pi model/auth runtime, one request (up to 4,096 output tokens), a 60-second cancellation deadline, and only explicitly supplied bounded facts. It has no tools, user extensions or ambient context. Plans use the existing goal/component/outline ledger; no parallel tutor or new database is introduced. The host formats facts and validates records without generating educational judgments. Seven profiles cover math, writing, science, humanities, languages, computing and practical/creative work. Curated fixtures are teaching examples, not calibrated assessments. Text cannot verify pronunciation, physical performance or laboratory execution.
 
@@ -94,7 +94,7 @@ learn extensions
 learn extensions disable "C:/my-extensions/helper.ts"
 learn extensions enable "C:/my-extensions/helper.ts" --trust
 learn config
-learn update                  # Update Pi in Sato only
+learn update                  # Update Pi in sage only
 learn update --extensions --trust
 learn doctor
 learn status                  # --json gives a detailed context packet
@@ -107,7 +107,7 @@ learn plugin add npm:@scope/package@1.0.0 --trust
 learn plugin remove npm:@scope/package@1.0.0
 learn plugin update --trust
 learn pi info
-learn pi update             # Update Sato's Pi, not global Pi
+learn pi update             # Update sage's Pi, not global Pi
 learn pi rollback           # Previous checked isolated installation
 learn pi reset              # Return to bundled dependency, retaining installs
 learn resource list
@@ -120,12 +120,12 @@ learn theme set dark
 
 Pi packages retain native npm/git/local sources, manifests and resource filters. Versioned npm packages stay pinned; use an unversioned source for tracking updates, or add the new version explicitly. Package removal uses native Pi semantics: managed package files are removed; local source files are retained. Individual extensions, skills, prompts and themes can be added, removed from configuration, enabled or disabled. `/settings` and `/reload` remain native Pi controls. See [Pi customization and updates](docs/PI.md) for examples and safety boundaries.
 
-`learn pi update [latest|1.x.y]` installs a separate SDK, checks actual offline tutor startup, then atomically selects it for subsequent launches. Failed checks leave the previous selection active. Auth, learning records and installed customization packages are not overwritten. Unsupported major releases require an adapter update; updating global Pi has no effect on Sato. Development dependency updates can also use `bun update @earendil-works/pi-coding-agent`, followed by the checks below.
+`learn pi update [latest|1.x.y]` installs a separate SDK, checks actual offline tutor startup, then atomically selects it for subsequent launches. Failed checks leave the previous selection active. Auth, learning records and installed customization packages are not overwritten. Unsupported major releases require an adapter update; updating global Pi has no effect on sage. Development dependency updates can also use `bun update @earendil-works/pi-coding-agent`, followed by the checks below.
 
 Files are created without overwriting existing outputs. Backups include a WAL-consistent database snapshot, verified originals and `brain.md`; they exclude credentials and Pi transcripts. Restore requires a **fresh** home:
 
 ```powershell
-$env:SATO_HOME = 'C:/path/restored-sato'
+$env:sage_HOME = 'C:/path/restored-sage'
 learn restore learning-backup.json
 ```
 
