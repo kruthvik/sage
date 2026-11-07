@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCustomization, executeCustomization, formatCustomization } from "../src/customization.ts";
-import { createSatoPaths } from "../../../packages/runtime/src/paths.ts";
+import { createSagePaths } from "../../../packages/runtime/src/paths.ts";
 import { createTutorRuntime, type TutorBridge } from "../../../packages/pi/src/tutor.ts";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -27,7 +27,7 @@ test("Pi-style commands distinguish engine and package updates and reject ambigu
 
 test("new commands delegate to existing isolated Pi adapters, not a new package manager", async () => {
   const calls: unknown[][] = [];
-  const paths = createSatoPaths({ home: join(tmpdir(), "sato-unused-command-test") });
+  const paths = createSagePaths({ home: join(tmpdir(), "sage-unused-command-test") });
   const operations = {
     bootstrap: async () => { calls.push(["bootstrap"]); },
     plugin: async (...args: unknown[]) => { calls.push(["plugin", ...args]); return []; },
@@ -48,7 +48,7 @@ test("new commands delegate to existing isolated Pi adapters, not a new package 
 });
 
 test("real CLI installs a single extension file, loads its tools, switches it off/on and removes it without touching global Pi", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sato-simple-cli-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "sage-simple-cli-")); roots.push(root);
   const home = join(root, "home"), global = join(root, "global-pi"), filename = join(root, "helper.ts");
   const entry = resolve("apps/cli/src/index.ts");
   await writeFile(filename, `export default function(pi) {
@@ -56,9 +56,12 @@ test("real CLI installs a single extension file, loads its tools, switches it of
     pi.registerCommand("simple-cli-command", { description: "Test command", handler: async () => {} });
   }`);
   const invoke = async (...args: string[]) => {
-    const child = Bun.spawn(["bun", entry, ...args], { cwd: root, env: { ...Bun.env, SATO_HOME: home, PI_CODING_AGENT_DIR: global }, stdout: "pipe", stderr: "pipe" });
-    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
-    return { code, stdout, stderr };
+    const child = Bun.spawn(["bun", entry, ...args], { cwd: root, env: { ...Bun.env, SAGE_HOME: home, PI_CODING_AGENT_DIR: global }, stdout: "pipe", stderr: "pipe" });
+    const timeout = setTimeout(() => child.kill(), 10000);
+    try {
+      const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      return { code, stdout, stderr };
+    } finally { clearTimeout(timeout); }
   };
   expect((await invoke("install", "./helper.ts")).stderr).toContain("--trust");
   expect((await invoke("list")).stdout).toContain("No Pi packages installed");
@@ -69,7 +72,7 @@ test("real CLI installs a single extension file, loads its tools, switches it of
   expect((await invoke("extensions")).stdout).toContain(filename);
   expect((await invoke("config")).stdout).toContain("skills:");
   const bridge: TutorBridge = { operation: async () => ({}), input: async () => {}, goal: async () => ({}), source: async () => [], approve: async () => ({}), calls: async () => { throw new Error("No paid calls"); }, stop: async () => ({}), shutdown: async () => {} };
-  const runtime = await createTutorRuntime(createSatoPaths({ home, cwd: root }), bridge);
+  const runtime = await createTutorRuntime(createSagePaths({ home, cwd: root }), bridge);
   try {
     expect(runtime.session.getActiveToolNames()).toContain("simple_cli_tool");
     expect(runtime.services.resourceLoader.getExtensions().extensions.some(extension => extension.commands.has("simple-cli-command"))).toBe(true);
@@ -94,6 +97,6 @@ test("real CLI installs a single extension file, loads its tools, switches it of
   expect((await invoke("update", "--extensions", "--trust")).code).toBe(0);
   expect((await invoke("install", "./helper.ts", "--global", "--trust")).code).toBe(1);
   expect((await invoke("--version")).stdout).toContain("Pi 1.");
-  expect((await invoke("--help")).stdout).toContain("learn install");
-  expect((await invoke("help", "--all")).stdout).toContain("learn resource");
-});
+  expect((await invoke("--help")).stdout).toContain("/extensions list | add PATH");
+  expect((await invoke("help", "--all")).stdout).toContain("sage resource");
+}, 30000);

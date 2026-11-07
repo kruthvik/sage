@@ -1,13 +1,13 @@
-import { createSatoResourceLoader } from "../../pi/src/runtime.ts";
-import { bootstrapSatoHome } from "./bootstrap.ts";
-import type { SatoPaths } from "./paths.ts";
+import { createSageResourceLoader } from "../../pi/src/runtime.ts";
+import { bootstrapSageHome } from "./bootstrap.ts";
+import type { SagePaths } from "./paths.ts";
 
-export { createSatoPaths } from "./paths.ts";
-export { createSatoRuntime } from "./runtime.ts";
+export { createSagePaths } from "./paths.ts";
+export { createSageRuntime } from "./runtime.ts";
 
-export async function inspectSatoResources(paths: SatoPaths) {
-  await bootstrapSatoHome(paths);
-  const loader = await createSatoResourceLoader(paths);
+export async function inspectSageResources(paths: SagePaths) {
+  await bootstrapSageHome(paths);
+  const loader = await createSageResourceLoader(paths);
   await loader.reload();
   return {
     extensions: loader.getExtensions().extensions.length,

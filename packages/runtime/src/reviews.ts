@@ -1,6 +1,37 @@
 import type { Component, Goal, Revision } from "../../core/src/contracts.ts";
 import { POLICY_VERSION, type ReviewProposal } from "../../core/src/learning.ts";
 import type { ComponentView } from "../../storage/src/projection.ts";
+import type { LearningStore } from "../../storage/src/store.ts";
+import { validTime } from "../../core/src/contracts.ts";
+import { projectReviewRecords } from "../../storage/src/review-validation.ts";
+
+export interface AcceptedReview {
+  schedule_event_id: string;
+  component_revision_id: string;
+  due_at: string;
+  due: boolean;
+  overdue: boolean;
+  status: "pending" | "completed" | "cancelled" | "rescheduled" | "unresolved";
+  unresolved_reason?: string;
+  completed_at?: string;
+  assessment_event_id?: string;
+  reason: string;
+  goal_revision_id?: string;
+  policy_version?: string;
+}
+
+export function reviewQueue(store: LearningStore, sessionId: string, asOfTime = store.now(), throughSeq = store.throughSeq): AcceptedReview[] {
+  const cutoff = Date.parse(validTime(asOfTime));
+  return projectReviewRecords(store, sessionId, asOfTime, throughSeq).map(({ schedule, goal, status, completion, unresolved_reason }) => {
+    const dueAt = String(schedule.payload.due_at), dueEpoch = Date.parse(dueAt);
+    return { schedule_event_id: schedule.event_id, component_revision_id: String(schedule.payload.component_revision_id), due_at: dueAt,
+      due: dueEpoch <= cutoff, overdue: cutoff > dueEpoch, status, completed_at: completion?.occurred_at,
+      assessment_event_id: typeof completion?.payload.assessment_event_id === "string" ? completion.payload.assessment_event_id : undefined,
+      reason: typeof schedule.payload.reason === "string" ? schedule.payload.reason : "Accepted review; original reason unavailable",
+      unresolved_reason, goal_revision_id: goal?.revision_id, policy_version: typeof schedule.payload.policy_version === "string" ? schedule.payload.policy_version : "legacy",
+    };
+  }).sort((a, b) => a.due_at.localeCompare(b.due_at) || a.schedule_event_id.localeCompare(b.schedule_event_id));
+}
 
 /** Transparent, replaceable baseline. Dates offer checks; they never fabricate forgetting. */
 export function proposeReviews(goal: Goal, views: ComponentView[], components: Revision<Component>[], asOfTime: string): ReviewProposal[] {

@@ -2,23 +2,23 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSatoPaths, installedApplicationRoot } from "../../runtime/src/paths.ts";
-import { bootstrapSatoHome } from "../../runtime/src/bootstrap.ts";
+import { createSagePaths, installedApplicationRoot } from "../../runtime/src/paths.ts";
+import { bootstrapSageHome } from "../../runtime/src/bootstrap.ts";
 import { managePlugin, ensureManagedPackages } from "../src/plugins.ts";
 import { manageResources, manageTheme } from "../src/resources.ts";
 import { createTutorRuntime, type TutorBridge } from "../src/tutor.ts";
 import { loadPi, piInfo, PI_PACKAGE, piRuntimeRoot, piSelectionPath, readPiSelection, validatePiSdk, type PiSdk } from "../src/sdk.ts";
 import { resetPi, rollbackPi, updatePi } from "../src/updates.ts";
-import { createSatoResourceLoader, createSatoResourceOptions, createSatoSettings } from "../src/runtime.ts";
-import { guardSatoResourceLoader } from "../src/runtime.ts";
+import { createSageResourceLoader, createSageResourceOptions, createSageSettings } from "../src/runtime.ts";
+import { guardSageResourceLoader } from "../src/runtime.ts";
 import type { ResourceLoader } from "@earendil-works/pi-coding-agent";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "sato-ecosystem-")); roots.push(root);
-  const paths = createSatoPaths({ home: join(root, "sato"), cwd: root });
-  await bootstrapSatoHome(paths);
+  const root = await mkdtemp(join(tmpdir(), "sage-ecosystem-")); roots.push(root);
+  const paths = createSagePaths({ home: join(root, "sage"), cwd: root });
+  await bootstrapSageHome(paths);
   return { root, paths };
 }
 const bridge: TutorBridge = { operation: async () => ({ goal: null }), input: async () => {}, goal: async () => ({}), source: async () => [], approve: async () => ({}), calls: async () => { throw new Error("No provider calls in ecosystem tests"); }, stop: async () => ({}), shutdown: async () => {} };
@@ -61,7 +61,7 @@ test("native package add exposes extension tools and commands; remove resolves t
   expect(await Bun.file(join(packageRoot, "extensions", "example.js")).exists()).toBe(true);
 });
 
-test("auto-discovered extension disable/enable and additional prompts use native Sato settings", async () => {
+test("auto-discovered extension disable/enable and additional prompts use native Sage settings", async () => {
   const { root, paths } = await fixture();
   const path = join(paths.userResources.extensions, "fixture.js");
   await writeFile(path, extension);
@@ -83,7 +83,7 @@ test("auto-discovered extension disable/enable and additional prompts use native
   } finally { await runtime.dispose(); }
 });
 
-test("native theme selection persists only in the Sato agent root", async () => {
+test("native theme selection persists only in the Sage agent root", async () => {
   const { paths } = await fixture();
   const theme = JSON.parse(await readFile(join(installedApplicationRoot, "node_modules", PI_PACKAGE, "dist", "modes", "interactive", "theme", "dark.json"), "utf8"));
   theme.name = "fixture-theme";
@@ -92,7 +92,7 @@ test("native theme selection persists only in the Sato agent root", async () => 
   expect(result.themes).toContain("fixture-theme");
   expect(result.selected).toBe("fixture-theme");
   const sdk = await loadPi(paths);
-  expect(createSatoSettings(paths, sdk).getThemeSetting()).toBe("fixture-theme");
+  expect(createSageSettings(paths, sdk).getThemeSetting()).toBe("fixture-theme");
   await expect(manageTheme(paths, "set", "missing")).rejects.toThrow("Unknown theme");
 });
 
@@ -104,7 +104,7 @@ test("package resource switches never widen an empty or narrowly selected native
   const first = join(packageRoot, "extensions", "first.js");
   await writeFile(first, extension);
   await writeFile(join(packageRoot, "extensions", "second.js"), extension.replaceAll("fixture_tool", "other_tool").replaceAll("fixture-command", "other-command"));
-  const sdk = await loadPi(paths), settings = createSatoSettings(paths, sdk);
+  const sdk = await loadPi(paths), settings = createSageSettings(paths, sdk);
   settings.setPackages([{ source: packageRoot, extensions: [], prompts: [] }]); await settings.flush();
   await manageResources(paths, "disable", "extensions", first);
   let runtime = await createTutorRuntime(paths, bridge);
@@ -131,19 +131,19 @@ test("package resource switches never widen an empty or narrowly selected native
 
 test("ambient .agents skills stay excluded while a literal explicit opt-in remains possible", async () => {
   const { paths } = await fixture();
-  const sdk = await loadPi(paths), settings = createSatoSettings(paths, sdk);
+  const sdk = await loadPi(paths), settings = createSageSettings(paths, sdk);
   const ambient = join(process.env.HOME || (await import("node:os")).homedir(), ".agents", "skills", "test-explicit", "SKILL.md");
   const skill = { name: "test-explicit", description: "Fixture", filePath: ambient, baseDir: ambient, disableModelInvocation: false, sourceInfo: { path: ambient, source: "auto", scope: "user" as const, origin: "top-level" as const } };
-  const filter = createSatoResourceOptions(paths, settings).skillsOverride!;
+  const filter = createSageResourceOptions(paths, settings).skillsOverride!;
   expect(filter({ skills: [skill], diagnostics: [] }).skills).toEqual([]);
   settings.setSkillPaths([ambient]);
   expect(filter({ skills: [skill], diagnostics: [] }).skills).toEqual([skill]);
   await settings.flush();
 });
 
-test("global npm fallback is never used; configured npm packages are provisioned in the Sato home", async () => {
+test("global npm fallback is never used; configured npm packages are provisioned in the Sage home", async () => {
   const { paths } = await fixture();
-  const sdk = await loadPi(paths), settings = createSatoSettings(paths, sdk);
+  const sdk = await loadPi(paths), settings = createSageSettings(paths, sdk);
   settings.setPackages(["npm:@test/fixture@1.0.0"]);
   const installs: string[] = [];
   class Manager {
@@ -158,14 +158,14 @@ test("global npm fallback is never used; configured npm packages are provisioned
 
 test("reload reads newly edited package declarations before preventing global npm fallback", async () => {
   const { paths } = await fixture();
-  const sdk = await loadPi(paths), settings = createSatoSettings(paths, sdk);
+  const sdk = await loadPi(paths), settings = createSageSettings(paths, sdk);
   await settings.flush();
   await writeFile(join(paths.agent, "settings.json"), JSON.stringify({ packages: ["npm:reload-fixture@1.0.0"] }));
   const installs: string[] = [];
   class Manager { async install(source: string) { installs.push(source); await mkdir(join(paths.agent, "npm", "node_modules", "reload-fixture"), { recursive: true }); } }
   let reloaded = false;
   const loader = { reload: async () => { expect(installs).toEqual(["npm:reload-fixture@1.0.0"]); reloaded = true; } } as unknown as ResourceLoader;
-  guardSatoResourceLoader(loader, paths, { ...sdk, DefaultPackageManager: Manager } as unknown as PiSdk, settings);
+  guardSageResourceLoader(loader, paths, { ...sdk, DefaultPackageManager: Manager } as unknown as PiSdk, settings);
   await loader.reload();
   expect(reloaded).toBe(true);
 });
@@ -229,9 +229,9 @@ test("CLI overrides a global Pi root, keeps native settings/resources separate a
   await mkdir(join(root, ".agents", "skills", "ambient"), { recursive: true });
   await writeFile(join(root, ".agents", "skills", "ambient", "SKILL.md"), "---\nname: ambient\ndescription: A global skill that must not leak\n---\nGlobal.");
   await mkdir(join(root, ".agents", "skills", "learning"), { recursive: true });
-  await writeFile(join(root, ".agents", "skills", "learning", "SKILL.md"), "---\nname: learning\ndescription: An ambient collision that must not suppress Sato's skill\n---\nGlobal instructions.");
+  await writeFile(join(root, ".agents", "skills", "learning", "SKILL.md"), "---\nname: learning\ndescription: An ambient collision that must not suppress Sage's skill\n---\nGlobal instructions.");
   const run = async (...args: string[]) => {
-    const child = Bun.spawn([process.execPath, join(installedApplicationRoot, "apps", "cli", "src", "index.ts"), ...args], { cwd: root, env: { ...process.env, HOME: root, SATO_HOME: paths.home, PI_CODING_AGENT_DIR: globalAgent }, stdout: "pipe", stderr: "pipe" });
+    const child = Bun.spawn([process.execPath, join(installedApplicationRoot, "apps", "cli", "src", "index.ts"), ...args], { cwd: root, env: { ...process.env, HOME: root, SAGE_HOME: paths.home, PI_CODING_AGENT_DIR: globalAgent }, stdout: "pipe", stderr: "pipe" });
     const [output, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     expect(error).toBe(""); expect(code).toBe(0); return JSON.parse(output);
   };
@@ -239,10 +239,10 @@ test("CLI overrides a global Pi root, keeps native settings/resources separate a
   expect((await run("theme", "set", "dark")).selected).toBe("dark");
   const resources = await run("resource", "list");
   expect(resources.skills.map((s: { name: string }) => s.name)).not.toContain("ambient");
-  expect(resources.skills.find((s: { name: string }) => s.name === "learning").path).toContain(join("sato", "resources", "skills"));
+  expect(resources.skills.find((s: { name: string }) => s.name === "learning").path).toBe(join(installedApplicationRoot, "resources", "skills", "learning", "SKILL.md"));
   expect(resources.diagnostics).toEqual([]);
   expect(await readFile(join(globalAgent, "settings.json"), "utf8")).toBe(globalSettings);
   expect(await Bun.file(join(paths.data, "learning.sqlite")).exists()).toBe(false);
-  const loader = await createSatoResourceLoader(paths); await loader.reload();
+  const loader = await createSageResourceLoader(paths); await loader.reload();
   expect(loader.getAgentsFiles().agentsFiles).toEqual([]);
 });

@@ -1,10 +1,10 @@
 import { Database } from "bun:sqlite";
 import { resolve } from "node:path";
-import { createSatoPaths } from "../packages/runtime/src/paths.ts";
+import { createSagePaths } from "../packages/runtime/src/paths.ts";
 
 // Read-only checks; never print credential values, chats or learner records.
 if (process.argv.includes("--inspect-home")) {
-  const paths = createSatoPaths({ home: process.env.SATO_HOME });
+  const paths = createSagePaths({ home: process.env.SAGE_HOME });
   const filename = resolve(paths.data, "learning.sqlite");
   if (await Bun.file(filename).exists()) {
     const db = new Database(filename, { readonly: true });
@@ -28,7 +28,7 @@ if (process.argv.includes("--inspect-home")) {
     const child = Bun.spawn(["git", "show", `:${filename}`], { stdout: "pipe", stderr: "pipe" });
     const content = await new Response(child.stdout).text();
     if (await child.exited) throw new Error(`Cannot inspect staged file: ${filename}`);
-    if (filename === "brain.md" && new Bun.CryptoHasher("sha256").update(content.replace(/\r\n/g, "\n")).digest("hex") !== "870f06bbfde9a285e5381fbef6714a1d5950d3413083e029faed42d6dd590ef2") findings.push("brain.md: modified boilerplate may contain personal preferences; update the reviewed template hash deliberately");
+    if (filename === "brain.md" && new Bun.CryptoHasher("sha256").update(content.replace(/\r\n/g, "\n")).digest("hex") !== "7ee37f7ab5aeed08d051ce53849aecaa2c3cfdbc13bc447ec0a4ce772be5d3b1") findings.push("brain.md: modified boilerplate may contain personal preferences; update the reviewed template hash deliberately");
     if (privateContent.test(content)) findings.push(`${filename}: private path or credential-like content`);
   }
   if (findings.length) throw new Error(`Publication blocked:\n${findings.join("\n")}`);

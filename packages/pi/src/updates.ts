@@ -1,17 +1,18 @@
 import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { SatoPaths } from "../../runtime/src/paths.ts";
-import { createSatoPaths } from "../../runtime/src/paths.ts";
-import { bootstrapSatoHome } from "../../runtime/src/bootstrap.ts";
+import type { SagePaths } from "../../runtime/src/paths.ts";
+import { createSagePaths } from "../../runtime/src/paths.ts";
+import { bootstrapSageHome } from "../../runtime/src/bootstrap.ts";
 import { loadInstalledPi, piInfo, PI_PACKAGE, piRuntimeRoot, piSelectionPath, readPiSelection, type PiSelection } from "./sdk.ts";
 import { createTutorRuntime, type TutorBridge } from "./tutor.ts";
+import { inspectSharedPi, resolveSharedPi } from "./shared-runtime.ts";
 
 export interface PiUpdateOptions {
   install?: (directory: string, version: string) => Promise<void>;
 }
 
-async function withUpdateLock<T>(paths: SatoPaths, work: () => Promise<T>): Promise<T> {
+async function withUpdateLock<T>(paths: SagePaths, work: () => Promise<T>): Promise<T> {
   const root = piRuntimeRoot(paths);
   await mkdir(root, { recursive: true });
   const lockPath = join(root, "update.lock");
@@ -25,37 +26,38 @@ async function withUpdateLock<T>(paths: SatoPaths, work: () => Promise<T>): Prom
   finally { await lock.close(); await unlink(lockPath); }
 }
 
-async function publishSelection(paths: SatoPaths, selection: PiSelection): Promise<void> {
+async function publishSelection(paths: SagePaths, selection: PiSelection): Promise<void> {
   const temporary = join(piRuntimeRoot(paths), `selection-${randomUUID()}.json`);
   await writeFile(temporary, JSON.stringify(selection, null, 2), { flag: "wx", mode: 0o600 });
   await rename(temporary, piSelectionPath(paths));
 }
 
 async function installPi(directory: string, version: string): Promise<void> {
-  await writeFile(join(directory, "package.json"), JSON.stringify({ name: "sato-isolated-pi", private: true, type: "module" }), { flag: "wx" });
+  await writeFile(join(directory, "package.json"), JSON.stringify({ name: "sage-isolated-pi", private: true, type: "module" }), { flag: "wx" });
   const child = Bun.spawn([process.execPath, "add", "--exact", "--ignore-scripts", `${PI_PACKAGE}@${version}`], { cwd: directory, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   if (exitCode !== 0) throw new Error(`Pi installation failed; active runtime unchanged.\n${(stderr || stdout).slice(-4000)}`);
 }
 
-async function checkCandidate(paths: SatoPaths, directory: string, version?: string): Promise<string> {
+async function checkCandidate(paths: SagePaths, directory: string, version?: string): Promise<string> {
   const sdk = await loadInstalledPi(directory);
   if (version && sdk.VERSION !== version) throw new Error("Installed Pi version does not match the requested version; active runtime unchanged");
   // Exercise the actual tutor adapter, not just npm's install exit status. No
   // credentials, learner data, third-party extensions or provider calls are used.
-  const probe = createSatoPaths({ home: join(directory, "compatibility-check", randomUUID()), applicationRoot: paths.applicationRoot, cwd: directory });
-  await bootstrapSatoHome(probe);
+  const probeRoot = join(piRuntimeRoot(paths), "compatibility-check", randomUUID());
+  const probe = createSagePaths({ home: probeRoot, applicationRoot: paths.applicationRoot, cwd: probeRoot });
+  await bootstrapSageHome(probe);
   const bridge: TutorBridge = { operation: async () => ({ goal: null }), input: async () => {}, goal: async () => ({}), source: async () => [], approve: async () => ({}), calls: async () => { throw new Error("Compatibility checks must not call a model provider"); }, stop: async () => ({}), shutdown: async () => {} };
   const runtime = await createTutorRuntime(probe, bridge, sdk);
   try {
     const tools = runtime.session.getActiveToolNames().sort();
-    if (tools.join() !== "learning_context,learning_define,learning_record,learning_source" || runtime.services.resourceLoader.getExtensions().errors.length || runtime.services.resourceLoader.getAgentsFiles().agentsFiles.length) throw new Error("Pi failed the isolated tutor compatibility check; active runtime unchanged");
+    if (tools.join() !== "learning_activity,learning_context,learning_define,learning_record,learning_skill,learning_source,render_ui" || runtime.services.resourceLoader.getExtensions().errors.length || runtime.services.resourceLoader.getAgentsFiles().agentsFiles.length) throw new Error("Pi failed the isolated tutor compatibility check; active runtime unchanged");
   } finally { await runtime.dispose(); }
   return sdk.VERSION;
 }
 
-export async function updatePi(paths: SatoPaths, requested = "latest", options: PiUpdateOptions = {}) {
-  if (requested !== "latest" && !/^1\.\d+\.\d+(?:-[\w.-]+)?$/.test(requested)) throw new Error("Use learn pi update [latest|1.x.y]. Breaking major versions require a Sato adapter update.");
+export async function updatePi(paths: SagePaths, requested = "latest", options: PiUpdateOptions = {}) {
+  if (requested !== "latest" && !/^1\.\d+\.\d+(?:-[\w.-]+)?$/.test(requested)) throw new Error("Use learn pi update [latest|1.x.y]. Breaking major versions require a Sage adapter update.");
   return withUpdateLock(paths, async () => {
     const previous = await readPiSelection(paths);
     const install = `install-${randomUUID()}`;
@@ -68,7 +70,21 @@ export async function updatePi(paths: SatoPaths, requested = "latest", options: 
   });
 }
 
-export async function rollbackPi(paths: SatoPaths) {
+export async function sharePi(paths: SagePaths, source: string, trusted = false) {
+  if (!trusted) throw new Error("Shared Pi executes installed code with OS privileges. Review the versioned installation, then use --trust.");
+  return withUpdateLock(paths, async () => {
+    const previous = await readPiSelection(paths), binding = await inspectSharedPi(source);
+    const install = `install-${randomUUID()}`, directory = join(piRuntimeRoot(paths), install);
+    await mkdir(directory);
+    await writeFile(join(directory, "shared.json"), JSON.stringify(binding), { flag: "wx", mode: 0o600 });
+    const version = await checkCandidate(paths, directory, binding.version);
+    await resolveSharedPi(directory);
+    await publishSelection(paths, { install, version, ...(previous ? { previous: { install: previous.install, version: previous.version } } : {}) });
+    return { ...await piInfo(paths), activated: "next tutor launch", recovery: "sage pi rollback or sage pi reset", preserved: "shared installed code, global Pi configuration and all Sage learner data" };
+  });
+}
+
+export async function rollbackPi(paths: SagePaths) {
   return withUpdateLock(paths, async () => {
     const current = await readPiSelection(paths);
     if (!current?.previous) throw new Error("No previous isolated runtime. Use learn pi reset for bundled Pi.");
@@ -78,7 +94,7 @@ export async function rollbackPi(paths: SatoPaths) {
   });
 }
 
-export async function resetPi(paths: SatoPaths) {
+export async function resetPi(paths: SagePaths) {
   return withUpdateLock(paths, async () => {
     // Archive instead of destroying the selection; works even for a corrupt
     // selection and never removes installed runtimes or learner data.

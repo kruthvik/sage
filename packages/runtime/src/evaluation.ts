@@ -2,18 +2,20 @@ import type { ComponentView } from "../../storage/src/projection.ts";
 import { projectComponents } from "../../storage/src/projection.ts";
 import type { LearningStore } from "../../storage/src/store.ts";
 import { PROJECTOR_VERSION, POLICY_VERSION } from "../../core/src/learning.ts";
+import { projectReviewRecords } from "../../storage/src/review-validation.ts";
 
 /** Descriptive local outcomes. No engagement objective or unsupported causal comparison. */
 export function evaluateLearning(store: LearningStore, throughSeq = store.throughSeq, asOfTime = store.now()) {
   const events = store.events(throughSeq).filter(e => e.branch === "real" && e.occurred_at <= asOfTime);
   const views = projectComponents(store, throughSeq, asOfTime);
-  const completed = new Set(events.filter(e => e.kind === "review_completed").map(e => e.payload.schedule_event_id));
+  const reviewSessions = new Set(events.filter(e => e.kind === "review_scheduled").map(e => e.session_id));
+  const validatedReviews = [...reviewSessions].flatMap(session => projectReviewRecords(store, session, asOfTime, throughSeq, true));
   const decisions = events.filter(e => e.kind === "decision" && e.payload.action !== "revision_defined");
   return {
     through_seq: throughSeq, as_of_time: asOfTime, projector_version: PROJECTOR_VERSION, policy_version: POLICY_VERSION,
     components: views.map(componentOutcomes),
     assistance_exposures: events.filter(e => e.kind === "assistance" && ["exposed", "possibly_exposed"].includes(e.payload.stage as string)).map(e => ({ event_id: e.event_id, kind: e.payload.kind, stage: e.payload.stage, answer_bearing: e.payload.answer_bearing })),
-    reviews: events.filter(e => e.kind === "review_scheduled").map(e => ({ schedule_event_id: e.event_id, component_revision_id: e.payload.component_revision_id, due_at: e.payload.due_at, completed: completed.has(e.event_id) })),
+    reviews: validatedReviews.map(r => ({ schedule_event_id: r.schedule.event_id, component_revision_id: r.schedule.payload.component_revision_id, due_at: r.schedule.payload.due_at, completed: r.status === "completed", status: r.status, goal_revision_id: r.goal?.revision_id, unresolved_reason: r.unresolved_reason })),
     decisions: decisions.map(e => ({ event_id: e.event_id, action: e.payload.action, policy_version: e.payload.policy_version ?? "legacy", evidence_ids: e.payload.evidence_event_ids, selected_candidate_id: e.payload.selected_candidate_id, candidate_ids: e.payload.candidate_ids, reason_codes: e.payload.reason_codes, user_override: e.payload.user_override ?? false })),
     declared_abandonments: decisions.filter(e => e.payload.action === "abandon").map(e => ({ event_id: e.event_id, evidence_event_ids: e.payload.evidence_event_ids })),
     checkpoints: events.filter(e => e.kind === "checkpoint").map(e => ({ event_id: e.event_id, stopped: e.payload.stopped, gaps: e.payload.gaps })),

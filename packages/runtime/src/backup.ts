@@ -2,11 +2,11 @@ import { Database } from "bun:sqlite";
 import { access, mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { hash, type LearningStore } from "../../storage/src/store.ts";
-import type { SatoPaths } from "./paths.ts";
+import type { SagePaths } from "./paths.ts";
 
-interface Backup { format: "sato-backup-v1"; created_at: string; database: string; database_hash: string; blobs: Array<{ hash: string; data: string }>; brain: string }
+interface Backup { format: "sage-backup-v1" | "sato-backup-v1"; created_at: string; database: string; database_hash: string; blobs: Array<{ hash: string; data: string }>; brain: string }
 /** serialize() snapshots committed WAL content; never copy the live .sqlite file alone. */
-export async function backup(store: LearningStore, paths: SatoPaths, destination: string): Promise<void> {
+export async function backup(store: LearningStore, paths: SagePaths, destination: string): Promise<void> {
   const snapshot = store.db.transaction(() => ({ data: store.db.serialize(), blobs: store.db.query<{ hash: string }, []>("SELECT hash FROM blob_manifest ORDER BY hash").all() }))();
   // SQLite documents that serialized WAL images must use rollback-mode header
   // bytes for deserialize(). This changes the snapshot only, never the live DB.
@@ -18,16 +18,19 @@ export async function backup(store: LearningStore, paths: SatoPaths, destination
     if (hash(bytes) !== blob.hash) throw new Error(`Original blob failed verification: ${blob.hash}`);
     blobs.push({ hash: blob.hash, data: bytes.toString("base64") });
   }
-  const result: Backup = { format: "sato-backup-v1", created_at: new Date().toISOString(), database: Buffer.from(snapshot.data).toString("base64"), database_hash: hash(snapshot.data), blobs, brain: await readFile(paths.brain, "utf8").catch(() => "") };
+  const result: Backup = { format: "sage-backup-v1", created_at: new Date().toISOString(), database: Buffer.from(snapshot.data).toString("base64"), database_hash: hash(snapshot.data), blobs, brain: await readFile(paths.brain, "utf8").catch(() => "") };
   await writeFile(resolve(destination), JSON.stringify(result), { flag: "wx", mode: 0o600 });
 }
-export async function restore(paths: SatoPaths, filename: string): Promise<void> {
-  // Restore is deliberately non-overwriting. A caller chooses a fresh SATO_HOME.
+export async function restore(paths: SagePaths, filename: string): Promise<void> {
+  // Restore is deliberately non-overwriting. A caller chooses a fresh SAGE_HOME.
   const existing = await access(join(paths.data, "learning.sqlite")).then(() => true, () => false);
-  if (existing) throw new Error("Restore requires a fresh SATO_HOME without a learning database; existing data was not changed");
+  if (existing) throw new Error("Restore requires a fresh SAGE_HOME without a learning database; existing data was not changed");
   if ((await stat(filename)).size > 200 * 1024 * 1024) throw new Error("Backup exceeds the 200 MB restore limit");
-  const input = JSON.parse(await readFile(filename, "utf8")) as Backup;
-  if (input.format !== "sato-backup-v1" || typeof input.database !== "string" || typeof input.brain !== "string" || !Array.isArray(input.blobs)) throw new Error("Invalid Sato backup");
+  const text = await readFile(filename, "utf8");
+  let input: Backup;
+  try { input = JSON.parse(text) as Backup; }
+  catch { throw new Error("Invalid Sage backup JSON"); }
+  if (!["sage-backup-v1", "sato-backup-v1"].includes(input.format) || typeof input.database !== "string" || typeof input.brain !== "string" || !Array.isArray(input.blobs)) throw new Error("Invalid Sage backup");
   const bytes = Buffer.from(input.database, "base64");
   if (hash(bytes) !== input.database_hash) throw new Error("Backup database hash mismatch");
   if (bytes.length < 100 || bytes.subarray(0, 16).toString() !== "SQLite format 3\0") throw new Error("Invalid SQLite image");

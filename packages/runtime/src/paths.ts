@@ -9,7 +9,7 @@ export interface ResourceRoots {
   themes: string;
 }
 
-export interface SatoPaths {
+export interface SagePaths {
   applicationRoot: string;
   cwd: string;
   home: string;
@@ -42,7 +42,7 @@ function resourceRoots(root: string): ResourceRoots {
   };
 }
 
-export function createSatoPaths(options: PathOptions = {}): SatoPaths {
+export function createSagePaths(options: PathOptions = {}): SagePaths {
   const applicationRoot = resolve(options.applicationRoot ?? installedApplicationRoot);
   const home = resolve(options.home ?? join(options.userHome ?? homedir(), ".learn"));
   const agent = join(home, "agent");

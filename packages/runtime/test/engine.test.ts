@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile, readFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { createSatoPaths } from "../src/paths.ts";
-import { bootstrapSatoHome } from "../src/bootstrap.ts";
+import { createSagePaths } from "../src/paths.ts";
+import { bootstrapSageHome } from "../src/bootstrap.ts";
 import { LearningService, startLearningServer, requestLearning } from "../src/service.ts";
 import { backup, restore } from "../src/backup.ts";
 import { installFixtures } from "../../activities/src/fixtures.ts";
@@ -15,8 +15,8 @@ import { projectComponents } from "../../storage/src/projection.ts";
 const roots: string[] = []; const services: LearningService[] = [];
 afterEach(async () => { for (const s of services.splice(0)) s.close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "sato-engine-")); roots.push(root);
-  const paths = createSatoPaths({ home: join(root, "home") }); await bootstrapSatoHome(paths);
+  const root = await mkdtemp(join(tmpdir(), "sage-engine-")); roots.push(root);
+  const paths = createSagePaths({ home: join(root, "home") }); await bootstrapSageHome(paths);
   const service = new LearningService(paths); services.push(service);
   const goal = service.store.define({ operation_id: randomUUID(), kind: "goal", body: { mode: "exam", objective: "Explain conservation under exam conditions", subject: "science", horizon_days: 7, target_format: "oral defense", criteria: ["Explain system boundaries"], allowed_aids: [], constraints: [], probe: "skip", provider_sharing: true, source_ids: [] } }, "learner", "test") as unknown as Revision<Goal>;
   return { root, paths, service, goal };
@@ -44,7 +44,9 @@ test("source receipts, UTF-8 previews, acceptance and removal preserve originals
 
 test("unsupported or malformed files fail before partial ingestion", async () => {
   const f = await fixture(); const pdf = join(f.root, "paper.pdf"); await writeFile(pdf, "not a PDF");
-  await expect(f.service.sources.importFile(pdf)).rejects.toThrow("verified adapter");
+  await expect(f.service.sources.importFile(pdf)).rejects.toThrow("PDF signature");
+  const audio = join(f.root, "audio.mp3"); await writeFile(audio, "audio content");
+  await expect(f.service.sources.importFile(audio)).rejects.toThrow("verified adapter");
   const binary = join(f.root, "binary.txt"); await writeFile(binary, new Uint8Array([255, 254, 253]));
   await expect(f.service.sources.importFile(binary)).rejects.toThrow("UTF-8");
   expect(f.service.sources.list()).toEqual([]);
@@ -68,24 +70,24 @@ test("consistent WAL backup restores original bytes and deterministic evidence; 
   const source = await f.service.sources.importFile(sourcePath); f.service.sources.accept(source.revision_id);
   const before = canonical(projectComponents(f.service.store, f.service.store.throughSeq, "2026-10-10T12:00:00.000Z"));
   const filename = join(f.root, "backup.json"); await backup(f.service.store, f.paths, filename);
-  const freshPaths = createSatoPaths({ home: join(f.root, "restored") }); await restore(freshPaths, filename);
+  const freshPaths = createSagePaths({ home: join(f.root, "restored") }); await restore(freshPaths, filename);
   const restored = new LearningService(freshPaths); services.push(restored);
   expect(restored.store.integrity()).toEqual(["ok"]);
   expect(canonical(projectComponents(restored.store, restored.store.throughSeq, "2026-10-10T12:00:00.000Z"))).toBe(before);
   expect(restored.sources.list()[0]!.status).toBe("indexed");
   expect(await readFile(join(freshPaths.data, "blobs", source.body.original_hash), "utf8")).toBe("A private source original");
-  await expect(restore(freshPaths, filename)).rejects.toThrow("fresh SATO_HOME");
+  await expect(restore(freshPaths, filename)).rejects.toThrow("fresh SAGE_HOME");
   const bad = JSON.parse(await readFile(filename, "utf8")); bad.database_hash = "corrupt";
   const badPath = join(f.root, "corrupt.json"); await writeFile(badPath, JSON.stringify(bad));
-  await expect(restore(createSatoPaths({ home: join(f.root, "bad") }), badPath)).rejects.toThrow("hash mismatch");
+  await expect(restore(createSagePaths({ home: join(f.root, "bad") }), badPath)).rejects.toThrow("hash mismatch");
   await expect(backup(f.service.store, f.paths, filename)).rejects.toThrow();
 });
 
 test("CLI initializes, diagnoses, exports, demos and reports provider-independent status", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sato-cli-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "sage-cli-")); roots.push(root);
   const home = join(root, "home"); await mkdir(home);
   const invoke = async (...args: string[]) => {
-    const process = Bun.spawn(["bun", "apps/cli/src/index.ts", ...args], { env: { ...Bun.env, SATO_HOME: home }, stdout: "pipe", stderr: "pipe" });
+    const process = Bun.spawn(["bun", "apps/cli/src/index.ts", ...args], { env: { ...Bun.env, SAGE_HOME: home }, stdout: "pipe", stderr: "pipe" });
     const [code, stdout, stderr] = await Promise.all([process.exited, new Response(process.stdout).text(), new Response(process.stderr).text()]);
     return { code, stdout, stderr };
   };
@@ -95,7 +97,7 @@ test("CLI initializes, diagnoses, exports, demos and reports provider-independen
   const capabilities = await invoke("capabilities"); expect(capabilities.code).toBe(0); expect(capabilities.stdout).toContain('"name": "calculator"'); expect(capabilities.stdout).toContain('"status": "unavailable"');
   const evaluation = await invoke("evaluate", "--json"); expect(evaluation.code).toBe(0); expect(JSON.parse(evaluation.stdout).components).toEqual([]);
   const demo = await invoke("demo", "--answers", "5,7,9"); expect(demo.code).toBe(0); expect(demo.stdout).toContain("3/3 numerical matches");
-  const file = join(root, "export.json"); expect((await invoke("export", file)).code).toBe(0); expect(JSON.parse(await readFile(file, "utf8")).format).toBe("sato-private-export-v1");
+  const file = join(root, "export.json"); expect((await invoke("export", file)).code).toBe(0); expect(JSON.parse(await readFile(file, "utf8")).format).toBe("sage-private-export-v1");
   expect((await invoke("unknown-command")).code).toBe(1);
   const noTerminal = await invoke(); expect(noTerminal.code).toBe(1); expect(noTerminal.stderr).toContain("requires a terminal");
 });

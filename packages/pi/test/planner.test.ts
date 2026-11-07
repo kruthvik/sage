@@ -5,16 +5,16 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { planWithPi } from "../src/planner.ts";
 import { loadPi } from "../src/sdk.ts";
-import { createSatoPaths } from "../../runtime/src/paths.ts";
-import { bootstrapSatoHome } from "../../runtime/src/bootstrap.ts";
+import { createSagePaths } from "../../runtime/src/paths.ts";
+import { bootstrapSageHome } from "../../runtime/src/bootstrap.ts";
 import { draft } from "../../core/test/planning-fixture.ts";
 import type { CallEntry } from "../../core/src/contracts.ts";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 test("actual Pi child plans with one offline provider call, isolated resources and terminal telemetry", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sato-planner-")); roots.push(root);
-  const paths = createSatoPaths({ home: join(root, "home") }); await bootstrapSatoHome(paths);
+  const root = await mkdtemp(join(tmpdir(), "sage-planner-")); roots.push(root);
+  const paths = createSagePaths({ home: join(root, "home") }); await bootstrapSageHome(paths);
   const sdk = await loadPi(paths);
   const ai = await import(import.meta.resolve("@earendil-works/pi-ai", fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))));
   const modelRuntime = await sdk.ModelRuntime.create({ authPath: join(paths.agent, "auth.json"), modelsPath: null, modelsStorePath: join(root, "catalog.json"), refreshOnCreate: false, allowModelNetwork: false });
@@ -22,8 +22,8 @@ test("actual Pi child plans with one offline provider call, isolated resources a
   let output = JSON.stringify(draft);
   let waitForCancel = false;
   let useToolCall = false;
-  modelRuntime.registerProvider("sato-offline-test", {
-    api: "sato-offline-test-api", baseUrl: "https://example.invalid", apiKey: "offline",
+  modelRuntime.registerProvider("sage-offline-test", {
+    api: "sage-offline-test-api", baseUrl: "https://example.invalid", apiKey: "offline",
     models: [{ id: "planner", name: "Offline planner", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 32000, maxTokens: 2000 }],
     streamSimple(model, context, options) {
       count++;
@@ -50,7 +50,7 @@ test("actual Pi child plans with one offline provider call, isolated resources a
   await writeFile(join(paths.config, "AGENTS.md"), "UNAUTHORIZED_CONTEXT");
   await writeFile(join(paths.userResources.extensions, "must-not-load.ts"), 'throw new Error("User extension must not execute in planner");');
   const calls: CallEntry[] = [];
-  const options = { sdk, modelRuntime, model: modelRuntime.getModel("sato-offline-test", "planner")!, sessionId: "parent", calls: async (entry: CallEntry) => { calls.push(entry); }, signal: new AbortController().signal };
+  const options = { sdk, modelRuntime, model: modelRuntime.getModel("sage-offline-test", "planner")!, sessionId: "parent", calls: async (entry: CallEntry) => { calls.push(entry); }, authorize: async () => ({ session_id: "parent", revision: "offline-authorized-scope", packet: { goal: { body: { provider_sharing: true } } } }), signal: new AbortController().signal };
   const request = { mode: "learn" as const, objective: "Learn Python", notes: "", context: {}, now: new Date().toISOString(), reason: "intake" as const };
   expect(await planWithPi(paths, request, options)).toEqual(draft);
   expect(count).toBe(1);
@@ -70,4 +70,6 @@ test("actual Pi child plans with one offline provider call, isolated resources a
   waitForCancel = false; useToolCall = true;
   await expect(planWithPi(paths, request, options)).rejects.toThrow("complete text");
   expect(count).toBe(4); // a tool-call loop cannot forward a second request
+  await expect(planWithPi(paths, request, { ...options, authorize: async () => { throw new Error("Current disclosure scope denied"); } })).rejects.toThrow("disclosure");
+  expect(count).toBe(4); // denied before any child provider invocation
 });

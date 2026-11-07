@@ -29,7 +29,7 @@ function fixture(subject: Goal["subject"] = "math") {
 test("strict commands reject unknown payloads and duplicate IDs return the original outcome", () => {
   const f = fixture();
   const seq = f.store.throughSeq;
-  expect(f.store.define(f.command, "learner").revision_id).toBe(f.goal.revision_id);
+  expect(f.store.define(f.command, "learner", "test").revision_id).toBe(f.goal.revision_id);
   expect(f.store.throughSeq).toBe(seq);
   expect(() => f.store.define({ ...f.command, body: { ...f.command.body, objective: "different" } })).toThrow("different content");
   expect(() => f.record("assessment", { sql: "DELETE FROM event" })).toThrow("Invalid operation");
@@ -38,10 +38,10 @@ test("strict commands reject unknown payloads and duplicate IDs return the origi
 
 test("stale goals and parent revisions reject transactionally", () => {
   const f = fixture();
-  const goal2 = f.store.define({ operation_id: "goal-update", kind: "goal", parent_revision_id: f.goal.revision_id, expected_goal_revision_id: f.goal.revision_id, body: { ...f.goal.body, objective: "New goal" } }, "learner");
+  const goal2 = f.store.define({ operation_id: "goal-update", kind: "goal", parent_revision_id: f.goal.revision_id, expected_goal_revision_id: f.goal.revision_id, body: { ...f.goal.body, objective: "New goal" } }, "learner", "test");
   const seq = f.store.throughSeq;
   expect(() => f.deliver()).toThrow("Stale goal");
-  expect(() => f.store.define({ operation_id: "stale-parent", kind: "goal", parent_revision_id: f.goal.revision_id, expected_goal_revision_id: goal2.revision_id, body: f.goal.body }, "learner")).toThrow("Stale parent");
+  expect(() => f.store.define({ operation_id: "stale-parent", kind: "goal", parent_revision_id: f.goal.revision_id, expected_goal_revision_id: goal2.revision_id, body: f.goal.body }, "learner", "test")).toThrow("Stale parent");
   expect(f.store.throughSeq).toBe(seq);
 });
 
@@ -116,8 +116,8 @@ test("context is bounded, excludes keys and preserves source/brain attribution",
 
 test("Pi cannot publish unreviewed work, invent consent, or read protected keys", () => {
   const f = fixture(); const task = f.tasks[0]!;
-  expect(() => f.store.define({ operation_id: "pi-ready", kind: "task_definition", expected_goal_revision_id: f.goal.revision_id, body: { ...task.body, prompt: "Solve a fresh equation", review: { method: "human", reason: "I approved myself" } } }, "pi")).toThrow("self-certify");
-  expect(() => f.store.define({ operation_id: "pi-consent", kind: "goal", expected_goal_revision_id: f.goal.revision_id, body: { ...f.goal.body, source_ids: ["fake-source"] } }, "pi")).toThrow("learner controls");
+  expect(() => f.store.define({ operation_id: "pi-ready", kind: "task_definition", expected_goal_revision_id: f.goal.revision_id, body: { ...task.body, prompt: "Solve a fresh equation", review: { method: "human", reason: "I approved myself" } } }, "pi", "test")).toThrow("self-certify");
+  expect(() => f.store.define({ operation_id: "pi-consent", kind: "goal", parent_revision_id: f.goal.revision_id, expected_goal_revision_id: f.goal.revision_id, body: { ...f.goal.body, source_ids: ["fake-source"] } }, "pi", "test")).toThrow("learner controls");
   expect(() => f.record("review_scheduled", { component_revision_id: task.body.component_revision_ids[0], due_at: "2026-10-08T12:00:00Z", consent: true, consent_response_event_id: "fake", reason: "Review later" })).toThrow("Missing learner_response");
 });
 
@@ -136,26 +136,26 @@ test("SQLite immutable triggers and separate model-call lifecycle prevent eviden
 test("fresh generated linear equations receive independent verification; wrong keys remain quarantined", () => {
   const f = fixture(); const task = f.tasks[0]!;
   const candidate = { operation_id: "fresh-equation", kind: "task_definition", expected_goal_revision_id: f.goal.revision_id, body: { ...task.body, prompt: "Solve 8x - 2 = 30. Respond with only the numerical value of x.", answer: "4", status: "candidate", review: { method: "unreviewed", reason: "Generated on demand" } } };
-  const accepted = f.store.define(candidate, "pi");
+  const accepted = f.store.define(candidate, "pi", "test");
   expect(accepted.body.status).toBe("practice_ready");
   expect((accepted.body.review as { method: string }).method).toBe("deterministic");
-  expect(f.store.define(candidate, "pi").revision_id).toBe(accepted.revision_id);
-  const rejected = f.store.define({ ...candidate, operation_id: "wrong-key", body: { ...candidate.body, answer: "999" } }, "pi");
+  expect(f.store.define(candidate, "pi", "test").revision_id).toBe(accepted.revision_id);
+  const rejected = f.store.define({ ...candidate, operation_id: "wrong-key", body: { ...candidate.body, answer: "999" } }, "pi", "test");
   expect(rejected.body.status).toBe("candidate");
-  expect(() => f.store.define({ operation_id: "bad-instance", kind: "task_instance", expected_goal_revision_id: f.goal.revision_id, body: { definition_revision_id: rejected.revision_id, goal_revision_id: f.goal.revision_id, purpose: "independent", conditions: [] } })).toThrow("not reviewed");
+  expect(() => f.store.define({ operation_id: "bad-instance", kind: "task_instance", expected_goal_revision_id: f.goal.revision_id, body: { definition_revision_id: rejected.revision_id, goal_revision_id: f.goal.revision_id, purpose: "independent", conditions: [] } }, "pi", "test")).toThrow("not reviewed");
 });
 
 test("protected assessment denies tutor authorship and family-lineage overlap", () => {
   const f = fixture(); const task = f.tasks[0]!; f.deliver();
-  expect(() => f.store.define({ operation_id: "pi-protected", kind: "task_definition", expected_goal_revision_id: f.goal.revision_id, body: { ...task.body, partition: "protected", status: "candidate", review: { method: "unreviewed", reason: "Candidate" } } }, "pi")).toThrow("protected outcome bank");
-  const related = f.store.define({ operation_id: "related-family", kind: "task_family", expected_goal_revision_id: f.goal.revision_id, body: { title: "Related equation family", construct: "Same solution structure", variation: "New values", lineage_revision_ids: [task.body.family_revision_id] } }, "human");
-  const protectedTask = f.store.define({ operation_id: "human-protected", kind: "task_definition", expected_goal_revision_id: f.goal.revision_id, body: { ...task.body, family_revision_id: related.revision_id, prompt: "Solve 8x - 2 = 30. Respond with only the numerical value of x.", answer: "4", partition: "protected" } }, "human");
-  expect(() => f.store.define({ operation_id: "protected-instance", kind: "task_instance", expected_goal_revision_id: f.goal.revision_id, body: { definition_revision_id: protectedTask.revision_id, goal_revision_id: f.goal.revision_id, purpose: "application", conditions: [] } }, "human")).toThrow("overlaps a delivered family");
+  expect(() => f.store.define({ operation_id: "pi-protected", kind: "task_definition", expected_goal_revision_id: f.goal.revision_id, body: { ...task.body, partition: "protected", status: "candidate", review: { method: "unreviewed", reason: "Candidate" } } }, "pi", "test")).toThrow("protected outcome bank");
+  const related = f.store.define({ operation_id: "related-family", kind: "task_family", expected_goal_revision_id: f.goal.revision_id, body: { title: "Related equation family", construct: "Same solution structure", variation: "New values", lineage_revision_ids: [task.body.family_revision_id] } }, "human", "test");
+  const protectedTask = f.store.define({ operation_id: "human-protected", kind: "task_definition", expected_goal_revision_id: f.goal.revision_id, body: { ...task.body, family_revision_id: related.revision_id, prompt: "Solve 8x - 2 = 30. Respond with only the numerical value of x.", answer: "4", partition: "protected" } }, "human", "test");
+  expect(() => f.store.define({ operation_id: "protected-instance", kind: "task_instance", expected_goal_revision_id: f.goal.revision_id, body: { definition_revision_id: protectedTask.revision_id, goal_revision_id: f.goal.revision_id, purpose: "application", conditions: [] } }, "human", "test")).toThrow("overlaps a delivered family");
 });
 
 test("mid-session goal edits preserve frozen task conditions and accept genuine subsequent work", () => {
   const f = fixture(); const instance = f.deliver();
-  const updated = f.store.define({ operation_id: "updated-preferences", kind: "goal", parent_revision_id: f.goal.revision_id, expected_goal_revision_id: f.goal.revision_id, body: { ...f.goal.body, learner_notes: "Use shorter explanations" } }, "learner");
+  const updated = f.store.define({ operation_id: "updated-preferences", kind: "goal", parent_revision_id: f.goal.revision_id, expected_goal_revision_id: f.goal.revision_id, body: { ...f.goal.body, learner_notes: "Use shorter explanations" } }, "learner", "test");
   const response = f.store.learnerResponse("5", "test");
   const event = f.store.record({ operation_id: "after-edit", kind: "attempt_submitted", expected_goal_revision_id: updated.revision_id, payload: { attempt_id: "after-edit", instance_revision_id: instance.revision_id, response_event_id: response.event_id, declared_aids: [] } }, "test");
   expect(event.payload.response).toBe("5");

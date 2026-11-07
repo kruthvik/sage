@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SatoPaths } from "./paths.ts";
+import type { SagePaths } from "./paths.ts";
 
-export async function bootstrapSatoHome(paths: SatoPaths): Promise<void> {
+export async function bootstrapSageHome(paths: SagePaths): Promise<void> {
   try {
     await mkdir(paths.sessions, { recursive: true });
     for (const root of Object.values(paths.userResources)) {
@@ -13,6 +13,6 @@ export async function bootstrapSatoHome(paths: SatoPaths): Promise<void> {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     });
   } catch (error) {
-    throw new Error("Unable to initialize Sato home directory", { cause: error });
+    throw new Error("Unable to initialize Sage home directory", { cause: error });
   }
 }

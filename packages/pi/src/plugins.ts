@@ -1,31 +1,31 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { SettingsManager } from "@earendil-works/pi-coding-agent";
-import type { SatoPaths } from "../../runtime/src/paths.ts";
+import type { SagePaths } from "../../runtime/src/paths.ts";
 import { loadPi, type PiSdk } from "./sdk.ts";
 
-export function normalizePluginSource(paths: SatoPaths, source: string): string {
+export function normalizePluginSource(paths: SagePaths, source: string): string {
   return /^(npm:|git:|https?:)/.test(source) ? source : resolve(paths.cwd, source);
 }
 
-function managedNpmPath(paths: SatoPaths, source: string): string {
+function managedNpmPath(paths: SagePaths, source: string): string {
   const name = /^npm:((?:@[^/]+\/)?[^@/]+)(?:@.+)?$/.exec(source)?.[1];
   if (!name || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name)) throw new Error(`Invalid npm Pi package: ${source}`);
   return join(paths.agent, "npm", "node_modules", name);
 }
 
-export async function ensureManagedPackages(paths: SatoPaths, sdk: PiSdk, settings: SettingsManager): Promise<void> {
+export async function ensureManagedPackages(paths: SagePaths, sdk: PiSdk, settings: SettingsManager): Promise<void> {
   const manager = new sdk.DefaultPackageManager({ cwd: paths.config, agentDir: paths.agent, settingsManager: settings });
   for (const pkg of settings.getPackages()) {
     const source = typeof pkg === "string" ? pkg : pkg.source;
     if (!source.startsWith("npm:")) continue;
     const managed = managedNpmPath(paths, source);
     if (!existsSync(managed)) await manager.install(source);
-    if (!existsSync(managed)) throw new Error(`Isolated package missing: ${source}. Sato will not load a global npm fallback.`);
+    if (!existsSync(managed)) throw new Error(`Isolated package missing: ${source}. Sage will not load a global npm fallback.`);
   }
 }
 
-export async function managePlugin(paths: SatoPaths, action: string, source?: string, trusted = false): Promise<unknown> {
+export async function managePlugin(paths: SagePaths, action: string, source?: string, trusted = false): Promise<unknown> {
   if (!["list", "add", "remove", "update"].includes(action)) throw new Error("Usage: plugin list | add SOURCE --trust | remove SOURCE | update [SOURCE] --trust");
   const sdk = await loadPi(paths);
   const settings = sdk.SettingsManager.create(paths.config, paths.agent, { projectTrusted: false });

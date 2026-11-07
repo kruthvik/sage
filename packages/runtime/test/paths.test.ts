@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
-import { createSatoPaths } from "../src/paths.ts";
+import { createSagePaths } from "../src/paths.ts";
 
-describe("Sato paths", () => {
+describe("Sage paths", () => {
   test("keeps package, user home and invocation directory distinct", () => {
-    const paths = createSatoPaths({ applicationRoot: resolve("/app/sato"), userHome: resolve("/user"), cwd: resolve("/school/biology") });
-    expect(paths.applicationRoot).toBe(resolve("/app/sato"));
+    const paths = createSagePaths({ applicationRoot: resolve("/app/sage"), userHome: resolve("/user"), cwd: resolve("/school/biology") });
+    expect(paths.applicationRoot).toBe(resolve("/app/sage"));
     expect(paths.cwd).toBe(resolve("/school/biology"));
     expect(paths.home).toBe(resolve("/user/.learn"));
     expect(paths.agent).toBe(join(paths.home, "agent"));

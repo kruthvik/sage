@@ -13,7 +13,7 @@ export async function runOfflineDemo(answers?: string[]): Promise<{ correct: num
   const reader = answers ? undefined : createInterface({ input: stdin, output: stdout });
   const goal = store.define({ operation_id: randomUUID(), kind: "goal", body: { mode: "learn", objective: "Solve linear equations and interpret them in context", subject: "math", horizon_days: 30, target_format: "independent numerical response", criteria: ["Preserve equality"], allowed_aids: [], constraints: [], probe: "skip", provider_sharing: false, source_ids: [] } }, "learner", sessionId) as unknown as Revision<Goal>;
   const tasks = installFixtures(store, goal);
-  console.log("Sato · offline learning demo\nNo provider calls. Demo records are temporary and separate from your learning history.\n\nTo preserve equality, undo each operation on both sides. For 2x + 4 = 12, subtract 4, then divide by 2: x = 4.\nTry these fresh tasks. Type /hint for help or /stop to end. Your budget never forces a stop.\n");
+  console.log("Sage · offline learning demo\nNo provider calls. Demo records are temporary and separate from your learning history.\n\nTo preserve equality, undo each operation on both sides. For 2x + 4 = 12, subtract 4, then divide by 2: x = 4.\nTry these fresh tasks. Type /hint for help or /stop to end. Your budget never forces a stop.\n");
   let count = 0, correct = 0;
   try {
     for (const [index, task] of tasks.entries()) {

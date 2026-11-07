@@ -12,7 +12,7 @@ Implementation authority: `outputs/main.md`; `outputs/start.md` was excluded. Th
 | Family/definition/instance/rubric lineage | Exact referenced revisions, stable entities and parent checks |
 | Meaningful steps, assistance, corrections | Typed events, scoped exposure and append-only rescoring |
 | Deterministic as-of evidence | Explicit sequence/time fold, tested delay and changed context |
-| Bun facts; Pi models/dialogue | Four educational tools over authenticated loopback |
+| Bun facts; Pi models/dialogue | Five educational tools over authenticated loopback; learner UI writes stay in trusted host callbacks |
 | Actual model calls separate from evidence | Observed provider hooks and explicit logging gaps |
 | Original sources as untrusted data | Hashes, receipt/extraction/review/index states and quoted search |
 | On-demand reviewed tasks | Curated fixtures, candidate review and independent narrow math verification |
@@ -21,6 +21,7 @@ Implementation authority: `outputs/main.md`; `outputs/start.md` was excluded. Th
 | Pi ecosystem and isolation | Updatable public Pi 1.x SDK, native package/resource/theme controls, separate auth/settings/keybindings/sessions |
 | Simpler Pi-like CLI | Install/remove/list/update aliases, readable output, short help, extension switches and preserved advanced commands |
 | Simplified delegated planning | Goal plus optional note; Pi child infers subject and saves a provisional outline through existing contracts |
+| Interactive activity interfaces | Reviewed MCQ selector, Feynman inversion child, and native scrap-work image submission with private blob storage |
 
 The research supports retrieval, spacing and bounded examples, feedback, mixing and comparison. It does not validate universal intervals, sparse-data forgetting curves, broad transfer, planning subagents or an optimal combined controller. The runtime uses a bounded Pi child at intake and consequential replanning, preserving the existing learning contracts and tutor setup. It infers the subject without a subject question, offers a small learner-correctable outline and optional check, and never fabricates ability evidence. Review dates are consented proposals. Fixtures are software/teaching examples rather than normed outcome tests.
 
@@ -36,6 +37,6 @@ Delegated planning tests exercise the actual Pi SDK with an offline custom provi
 
 Implementation references checked: installed Pi 1.0.0 public declarations/docs, [Pi SDK](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md), [Pi packages](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md), [Bun SQLite](https://bun.com/docs/runtime/sqlite), and [SQLite's deserialize contract](https://www.sqlite.org/c3ref/deserialize.html). WAL normalization changes header bytes 18/19 only in the detached snapshot.
 
-The Pi refactor removes the original exact 0.87.1 dependency pin and educational-only tool allowlist. Native packages can contribute functioning tools and commands. Tests exercise resource switches without widening native package filters, independent theme settings, isolated SDK selection, rollback/reset, installation and compatibility failures, settings refresh before package discovery, and global-home exclusion including skill-name collisions. A real registry installation into a temporary Sato home passed startup, resource smoke, theme selection and doctor checks; its native terminal passed `/status`, `/settings`, `/reload` and `/quit`. SDK updates improve Pi's providers, terminal and extension infrastructure; they do not replace Sato's domain code or validate teaching efficacy.
+The Pi refactor removes the original exact 0.87.1 dependency pin and educational-only tool allowlist. Native packages can contribute functioning tools and commands. Tests exercise resource switches without widening native package filters, independent theme settings, isolated SDK selection, rollback/reset, installation and compatibility failures, settings refresh before package discovery, and global-home exclusion including skill-name collisions. A real registry installation into a temporary Sage home passed startup, resource smoke, theme selection and doctor checks; its native terminal passed `/status`, `/settings`, `/reload` and `/quit`. SDK updates improve Pi's providers, terminal and extension infrastructure; they do not replace Sage's domain code or validate teaching efficacy.
 
 The simplified CLI delegates to those same public Pi adapters. End-to-end tests install an actual local extension through the CLI, check its tool and command in a real tutor runtime, toggle/reload it, remove it without deleting its code, preserve global Pi, reject unsupported scope flags, and distinguish package updates from isolated SDK updates. Existing advanced syntax remains available via `learn help --all`.

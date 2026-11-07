@@ -22,7 +22,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.production.local
 .env.local
 
-# caches and local Sato runtime data
+# caches and local Sage runtime data
 .eslintcache
 .cache
 *.tsbuildinfo
@@ -59,6 +59,15 @@ backups/
 exports/
 *.backup.json
 *.private-records.json
+
+# personal sources, research notes and session scratchpads
+sources/
+specs/
+learning-research/
+learning-science/
+update.md
+update-simplified.md
+prose-optimization.json
 
 # IntelliJ based IDEs
 .idea

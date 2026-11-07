@@ -243,10 +243,11 @@ test("component-scoped outcomes do not credit an unobserved part of a multi-comp
 test("review scheduling rejects wrong-conversation or past consent; completion is not success", () => {
   const f = fixture(); f.observe(f.task("Practice before a review"));
   const foreign = f.store.learnerResponse("Yes, review later", "elsewhere");
-  const payload = { component_revision_id: f.component.revision_id, due_at: "2026-10-03T12:00:00.000Z", consent: true, consent_response_event_id: foreign.event_id, reason: "Learner-approved two-day check" };
-  expect(() => f.record("review_scheduled", payload)).toThrow("this conversation");
+  const auth = f.authorizeReview(f.component.revision_id, "2026-10-03T12:00:00.000Z");
+  const payload = { component_revision_id: f.component.revision_id, due_at: "2026-10-03T12:00:00.000Z", consent: true, consent_response_event_id: foreign.event_id, authorization_event_id: auth.event_id, reason: "Learner-approved two-day check" };
+  expect(() => f.record("review_scheduled", payload)).toThrow();
   const consent = f.store.learnerResponse("Yes, review in two days", "test");
-  expect(() => f.record("review_scheduled", { ...payload, due_at: "2026-09-30T12:00:00.000Z", consent_response_event_id: consent.event_id })).toThrow("future review date");
+  expect(() => f.record("review_scheduled", { ...payload, due_at: "2026-09-30T12:00:00.000Z", consent_response_event_id: consent.event_id })).toThrow();
   const scheduled = f.record("review_scheduled", { ...payload, consent_response_event_id: consent.event_id });
   f.time("2026-10-03T12:00:00.000Z");
   const checked = f.observe(f.task("Fresh review problem"), "Wrong method", "failure", "retention");

@@ -28,9 +28,19 @@ Exposure counters separately record task deliveries, possible/actual assistance 
 
 Projection selects the latest revision at the requested sequence/time. Corrected/not-observed/hypothetical evidence is removed from effective support. Contradictions weaken the hypothesis; an explicit resolved revision requires contradictory evidence. Sparse/no effective support becomes uncertain. Semantic descriptions and evidence links remain proposals; Bun does not diagnose the learner by reading their prose. A prerequisite edge alone does not establish a blockage.
 
+## Host-governed learn
+
+`host_learn_step` / `learning_state.learn_flow` supplies one scoped action and state-bound step ID. Pi authors a requested `learning_define kind=learn_step` or grades captured work; the host compiles existing immutable definitions and enforces native review, pinned question release and progress. No new evidence or revision kinds are introduced. Raw model goal/task-instance changes cannot bypass learn progression. Native free-response uses the Pi editor, without a child or webview.
+
+A completed question/unit is not readiness. The conservative local gate uses three distinct independent whole checks, original frozen essential criteria, conceptual explanation, method discrimination, changed application and a latest recheck. This is conditional engineering readiness, not permanent mastery, retention, semantic grading verification or exam equivalence. Ordinary native learner review is not expert provenance; conditional host-protocol application evidence does not modify the stricter storage transfer metric. Deadlines/budgets do not shorten learn progression; exam/cram/accelerate retain their contracts.
+
+Diagnostic participation is optional. **Teach without a diagnostic** or `/continue teach` retires the question workflow without changing topic, work or marks. The host then requests explanation, not a test or approval. Later `/continue practice` is a separate choice. `/continue advance` requires the evidence gate; `/continue gaps` requires a distinct confirmation and preserves unmet requirements. Stop/cancel/blank input never fabricate learner work.
+
+Only phase-relevant tools/schemas are advertised while the seven-tool inventory remains registered. Each request keeps fresh authorization. A bounded identity-matched public `working_set` can supply the prompt, rubric, aids and captured text without another context call; keys and copied private history are excluded. Truncated, omitted or image-only material is flagged incomplete and cannot justify unseen marks. Guidance is read on demand, not once per turn.
+
 ## Candidates, policy and decisions
 
-Bun proposes at most four substantive candidates plus a checkpoint. Features are qualitative/ordinal: active-goal relevance, near deadline, evidence uncertainty, observed support dependence, review need, transfer/selection gaps, family overexposure, coverage debt and rough cost. They are decision aids, not probabilities. Pi can choose another justified move or honor the learner's override. Bun never runs the highest-ranked action.
+Outside the authoritative learn step, Bun proposes at most four substantive candidates plus a checkpoint. Features are qualitative/ordinal: active-goal relevance, near deadline, evidence uncertainty, observed support dependence, review need, transfer/selection gaps, family overexposure, coverage debt and rough cost. They are decision aids, not probabilities. These legacy candidates remain advisory; they do not authorize skipping the learn step. Other modes can select another justified move under their existing contracts. The host never blindly runs the highest-ranked candidate.
 
 The transparent-2 fallback prioritizes stop/constraints and task reliability; evidenced prerequisite repair or discriminating hypotheses; less-supported fresh work after help; error-sensitive correction; meaningful varied application/selection; useful delayed retrieval; conditional advance and sensible checkpoints. Sparse data offers orientation and an example only if a meaningful attempt is not yet possible. Repeated failure proposes another representation/reassessment, not endless repetition. Exam relevance and actual format matter; `/exam` is not an MCQ mode. Optional exam metadata retains format, syllabus, component importance, timing and grading criteria.
 
@@ -52,7 +62,7 @@ Default packets have a hard 16,000-character limit, at most four task/outline-re
 
 ## Capabilities and artifacts
 
-`learning_source action=capabilities` reports actions, types, permissions, reliability, artifacts, provenance, evidence limits and fallback. The existing four-tool interface stays intact.
+`learning_source action=capabilities` reports actions, types, permissions, reliability, artifacts, provenance, evidence limits and fallback. The original four tools stay intact; `learning_activity` adds interactive learner submission without granting the model permission to author learner records.
 
 Currently implemented:
 

@@ -1,6 +1,6 @@
 # My learning preferences
 
-This is a blank template. Sato copies it into a new private home; it never overwrites your existing file. Everything below is optional. Short notes are enough.
+This is a blank template. Sage copies it into a new private home; it never overwrites your existing file. Everything below is optional. Short notes are enough.
 
 ## What matters to me
 
@@ -17,4 +17,4 @@ This is a blank template. Sato copies it into a new private home; it never overw
 
 ## Notes to remember
 
-Add only preferences you want your chosen model to see. Keep passwords, tokens and private source text elsewhere. These notes do not grant tool permissions, prove ability, prescribe a learning style, or override your current goal. Sato stores evidence and checkpoints in SQLite, not in this file.
+Add only preferences you want your chosen model to see. Keep passwords, tokens and private source text elsewhere. These notes do not grant tool permissions, prove ability, prescribe a learning style, or override your current goal. Sage stores evidence and checkpoints in SQLite, not in this file.

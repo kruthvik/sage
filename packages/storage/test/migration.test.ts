@@ -7,7 +7,7 @@ import { learningFixture } from "../../runtime/test/learning-fixture.ts";
 import { projectComponents } from "../src/projection.ts";
 
 test("additive v1-to-v2 migration preserves events/revisions and all seven tables", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sato-migration-"));
+  const root = await mkdtemp(join(tmpdir(), "sage-migration-"));
   let store: LearningStore | undefined;
   const fixture = learningFixture();
   try {

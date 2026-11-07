@@ -3,38 +3,38 @@ import { readdirSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { DefaultResourceLoader, ResourceLoader, SettingsManager, CreateAgentSessionOptions, CreateAgentSessionResult } from "@earendil-works/pi-coding-agent";
 import type { DisposableRuntime } from "../../core/src/index.ts";
-import type { SatoPaths } from "../../runtime/src/paths.ts";
+import type { SagePaths } from "../../runtime/src/paths.ts";
 import { loadPi, type PiSdk } from "./sdk.ts";
 import { ensureManagedPackages } from "./plugins.ts";
 
-type SatoResourceOptions = Omit<ConstructorParameters<typeof DefaultResourceLoader>[0], "cwd" | "agentDir" | "settingsManager">;
+type SageResourceOptions = Omit<ConstructorParameters<typeof DefaultResourceLoader>[0], "cwd" | "agentDir" | "settingsManager">;
 
 export interface PiRuntimeOptions {
   createSession?: (options: CreateAgentSessionOptions) => Promise<CreateAgentSessionResult>;
 }
 
-export function createSatoSettings(paths: SatoPaths, sdk: PiSdk): SettingsManager {
-  // The project scope is a Sato-owned location; never load invocation .pi/settings.json.
+export function createSageSettings(paths: SagePaths, sdk: PiSdk): SettingsManager {
+  // The project scope is a Sage-owned location; never load invocation .pi/settings.json.
   const settings = sdk.SettingsManager.create(paths.config, paths.agent, { projectTrusted: false });
   if (settings.getGlobalSettings().enableInstallTelemetry === undefined) settings.setEnableInstallTelemetry(false);
   return settings;
 }
 
-export async function createSatoResourceLoader(paths: SatoPaths, settingsManager?: SettingsManager, sdk?: PiSdk, extra: SatoResourceOptions = {}): Promise<DefaultResourceLoader> {
+export async function createSageResourceLoader(paths: SagePaths, settingsManager?: SettingsManager, sdk?: PiSdk, extra: SageResourceOptions = {}): Promise<DefaultResourceLoader> {
   const pi = sdk ?? await loadPi(paths);
-  const settings = settingsManager ?? createSatoSettings(paths, pi);
+  const settings = settingsManager ?? createSageSettings(paths, pi);
   const loader = new pi.DefaultResourceLoader({
     cwd: paths.config,
     agentDir: paths.agent,
     settingsManager: settings,
-    ...createSatoResourceOptions(paths, settings, pi),
+    ...createSageResourceOptions(paths, settings, pi),
     ...extra,
   });
-  guardSatoResourceLoader(loader, paths, pi, settings);
+  guardSageResourceLoader(loader, paths, pi, settings);
   return loader;
 }
 
-export function guardSatoResourceLoader(loader: ResourceLoader, paths: SatoPaths, pi: PiSdk, settings: SettingsManager): void {
+export function guardSageResourceLoader(loader: ResourceLoader, paths: SagePaths, pi: PiSdk, settings: SettingsManager): void {
   const reload = loader.reload.bind(loader);
   loader.reload = async options => {
     // Native Pi has a legacy global npm fallback. Always provision managed
@@ -46,7 +46,7 @@ export function guardSatoResourceLoader(loader: ResourceLoader, paths: SatoPaths
   };
 }
 
-export function createSatoResourceOptions(paths: SatoPaths, settings?: SettingsManager, sdk?: PiSdk): SatoResourceOptions {
+export function createSageResourceOptions(paths: SagePaths, settings?: SettingsManager, sdk?: PiSdk): SageResourceOptions {
   // Pi treats an explicitly supplied empty extension directory as an importable
   // module. Supply concrete entries instead; normal user/package discovery stays native.
   let extensionPaths: string[] = [];
@@ -58,7 +58,7 @@ export function createSatoResourceOptions(paths: SatoPaths, settings?: SettingsM
   const skillAllowed = (filePath: string): boolean => {
     const relativePath = relative(join(process.env.HOME || homedir(), ".agents", "skills"), filePath);
     if (relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) return true;
-    // Literal paths explicitly opted into in Sato settings are intentional
+    // Literal paths explicitly opted into in Sage settings are intentional
     // sharing, unlike automatic ambient discovery.
     const configured = [...(settings?.getSkillPaths() ?? []), ...(settings?.getPackages() ?? []).flatMap(pkg => typeof pkg === "string" ? [pkg] : pkg.skills?.length === 0 ? [] : [pkg.source])];
     return configured.some(input => {
@@ -76,10 +76,10 @@ export function createSatoResourceOptions(paths: SatoPaths, settings?: SettingsM
     additionalThemePaths: [paths.builtIn.themes],
     noContextFiles: true,
     // Pi also auto-discovers ~/.agents/skills independently of agentDir. That
-    // general user location must not leak into Sato's isolated environment.
+    // general user location must not leak into Sage's isolated environment.
     skillsOverride: ({ skills, diagnostics }) => {
       const selected = skills.filter(skill => skillAllowed(skill.filePath));
-      // Pi deduplicates names before this override. Recover a Sato skill that
+      // Pi deduplicates names before this override. Recover a Sage skill that
       // was shadowed by an excluded ambient skill, using Pi's public parser.
       const recoveryPaths = diagnostics.flatMap(d => d.collision && !skillAllowed(d.collision.winnerPath) && skillAllowed(d.collision.loserPath) ? [d.collision.loserPath] : []);
       const recovered = sdk && recoveryPaths.length ? sdk.loadSkills({ cwd: paths.config, agentDir: paths.agent, skillPaths: recoveryPaths, includeDefaults: false }) : { skills: [], diagnostics: [] };
@@ -93,10 +93,10 @@ export function createSatoResourceOptions(paths: SatoPaths, settings?: SettingsM
   };
 }
 
-export async function createSatoPiRuntime(paths: SatoPaths, options: PiRuntimeOptions = {}): Promise<DisposableRuntime> {
+export async function createSagePiRuntime(paths: SagePaths, options: PiRuntimeOptions = {}): Promise<DisposableRuntime> {
   const sdk = await loadPi(paths);
-  const settingsManager = createSatoSettings(paths, sdk);
-  const resourceLoader = await createSatoResourceLoader(paths, settingsManager, sdk);
+  const settingsManager = createSageSettings(paths, sdk);
+  const resourceLoader = await createSageResourceLoader(paths, settingsManager, sdk);
   await resourceLoader.reload();
   try {
     const { session } = await (options.createSession ?? sdk.createAgentSession)({

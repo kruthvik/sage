@@ -29,13 +29,17 @@ const fixtures = {
 /** Curated offline fixtures exercise domain behavior; they are not a calibrated assessment bank. */
 export function installFixtures(store: LearningStore, goal: Revision<Goal>): Revision<TaskDefinition>[] {
   if (!(goal.body.subject in fixtures)) return [];
+  const sessionId = store.events().find(e => e.seq === goal.created_seq)?.session_id;
+  if (!sessionId) throw new Error("Fixture goal has no owning conversation");
   const fixture = fixtures[goal.body.subject as keyof typeof fixtures];
-  const existing = [...new Map(store.revisions("task_definition").filter(r => r.body.title === fixture.title).map(r => [r.entity_id, r])).values()].filter(r => r.body.status === "practice_ready");
+  const prompts = new Set<string>(fixture.tasks.map(t => t.prompt));
+  const existing = [...new Map((store.revisions("task_definition") as Revision<TaskDefinition>[]).filter(r => r.body.title === fixture.title && prompts.has(r.body.prompt) && r.body.review.method === "curated" && store.events().some(e => e.seq === r.created_seq && e.actor === "curated_fixture")).map(r => [r.entity_id, r])).values()].filter(r => r.body.status === "practice_ready");
   if (existing.length) return existing.map(r => {
-    if (canonical(r.body.allowed_aids) === canonical(goal.body.allowed_aids)) return r;
-    return store.define({ operation_id: randomUUID(), kind: "task_definition", entity_id: r.entity_id, parent_revision_id: r.revision_id, expected_goal_revision_id: goal.revision_id, body: { ...r.body, allowed_aids: goal.body.allowed_aids } }, "curated_fixture");
+    const owned = store.events().some(e => e.seq === r.created_seq && e.session_id === sessionId);
+    if (owned && canonical(r.body.allowed_aids) === canonical(goal.body.allowed_aids)) return r;
+    return store.define({ operation_id: randomUUID(), kind: "task_definition", ...(owned ? { entity_id: r.entity_id, parent_revision_id: r.revision_id } : {}), expected_goal_revision_id: goal.revision_id, body: { ...r.body, allowed_aids: goal.body.allowed_aids } }, "curated_fixture", sessionId);
   }) as unknown as Revision<TaskDefinition>[];
-  const define = (kind: string, body: unknown) => store.define({ operation_id: randomUUID(), kind, expected_goal_revision_id: goal.revision_id, body }, "curated_fixture");
+  const define = (kind: string, body: unknown) => store.define({ operation_id: randomUUID(), kind, expected_goal_revision_id: goal.revision_id, body }, "curated_fixture", sessionId);
   const concept = define("concept", { title: fixture.concept, description: fixture.construct });
   const component = define("component", { title: fixture.title, behavior: fixture.behavior, subject: goal.body.subject, concept_revision_ids: [concept.revision_id], prerequisite_revision_ids: [], uncertainty: "Narrow fixture; no inference about other components" });
   const rubric = define("rubric", { title: fixture.title, dimensions: fixture.dimensions, provisional: false, source_span_ids: [] });

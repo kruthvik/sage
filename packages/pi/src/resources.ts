@@ -1,9 +1,9 @@
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { SettingsManager } from "@earendil-works/pi-coding-agent";
-import type { SatoPaths } from "../../runtime/src/paths.ts";
+import type { SagePaths } from "../../runtime/src/paths.ts";
 import { loadPi } from "./sdk.ts";
-import { createSatoResourceLoader, createSatoSettings } from "./runtime.ts";
+import { createSageResourceLoader, createSageSettings } from "./runtime.ts";
 
 const accessors = {
   extensions: ["getExtensionPaths", "setExtensionPaths"],
@@ -20,12 +20,12 @@ function configured(settings: SettingsManager) {
   return Object.fromEntries(Object.entries(accessors).map(([kind, [get]]) => [kind, settings[get]()]));
 }
 
-export async function manageResources(paths: SatoPaths, action: string, kind?: string, input?: string, trusted = false) {
+export async function manageResources(paths: SagePaths, action: string, kind?: string, input?: string, trusted = false) {
   if (!["list", "add", "remove", "enable", "disable"].includes(action)) throw new Error("Usage: learn resource list | add|remove|enable|disable KIND PATH [--trust]");
   const sdk = await loadPi(paths);
-  const settings = createSatoSettings(paths, sdk);
+  const settings = createSageSettings(paths, sdk);
   if (action === "list") {
-    const loader = await createSatoResourceLoader(paths, settings, sdk);
+    const loader = await createSageResourceLoader(paths, settings, sdk);
     await loader.reload();
     return { configured: configured(settings), extensions: loader.getExtensions().extensions.map(e => e.path), skills: loader.getSkills().skills.map(s => ({ name: s.name, path: s.filePath })), prompts: loader.getPrompts().prompts.map(p => ({ name: p.name, path: p.filePath })), themes: loader.getThemes().themes.map(t => ({ name: t.name, path: t.sourcePath })), errors: loader.getExtensions().errors, diagnostics: [...loader.getSkills().diagnostics, ...loader.getPrompts().diagnostics, ...loader.getThemes().diagnostics] };
   }
@@ -81,11 +81,11 @@ export async function manageResources(paths: SatoPaths, action: string, kind?: s
   return { action, kind: key, path, configured: configured(settings), packages: settings.getPackages(), ...(migratedFile ? { registration: "File package moved to Pi's native standalone extension switches" } : {}), applies: "next launch or /reload", note: "Files are not deleted. Use disable to turn off auto-discovered or packaged resources." };
 }
 
-export async function manageTheme(paths: SatoPaths, action = "list", name?: string) {
+export async function manageTheme(paths: SagePaths, action = "list", name?: string) {
   if (!["list", "set"].includes(action)) throw new Error("Usage: learn theme list | set NAME");
   const sdk = await loadPi(paths);
-  const settings = createSatoSettings(paths, sdk);
-  const loader = await createSatoResourceLoader(paths, settings, sdk);
+  const settings = createSageSettings(paths, sdk);
+  const loader = await createSageResourceLoader(paths, settings, sdk);
   await loader.reload();
   const themes = [...new Set(["system", "dark", "light", ...loader.getThemes().themes.map(theme => theme.name)])];
   if (action === "set") {

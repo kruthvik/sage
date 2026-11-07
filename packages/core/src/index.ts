@@ -6,3 +6,5 @@ export interface DisposableRuntime {
 export * from "./contracts.ts";
 export { subjectProfiles } from "./subjects.ts";
 export * from "./learning.ts";
+export * from "./interactions.ts";
+export * from "./feynman.ts";
