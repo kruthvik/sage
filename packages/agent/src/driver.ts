@@ -81,16 +81,35 @@ export class SessionDriver {
   /** Resolves when background research has landed (eval/tests). */
   async idle(): Promise<void> { while (this.background.size || this.draining) { await Promise.all([...this.background]); await this.draining; } }
 
+  /** The foreground effect that failed after its automatic retry; the session waits on it until retry(). */
+  failed: Effect | undefined;
+  async retry(): Promise<boolean> {
+    const fx = this.failed;
+    if (!fx) return false;
+    this.failed = undefined; this.queue.unshift(fx);
+    await this.drain();
+    return true;
+  }
+
   private out(event: string, data: unknown) { this.emit({ event, sessionId: this.sessionId, data }); }
 
   private async handle(fx: Effect): Promise<void> {
     switch (fx.kind) {
       case "call_role": {
         const run = async () => {
-          try {
-            const evs = await runRole(fx, this.state, { models: this.models, roleCall: this.rt.roleCall, researchCall: this.rt.researchCall, signal: this.abort.signal }, ++this.seq);
-            for (const e of evs) { const err = this.apply(e.event, e.actor); if (err) this.out("error", { code: "role_output_rejected", role: fx.role, message: err }); }
-          } catch (e) { this.out("error", { code: "role_failed", role: fx.role, purpose: fx.purpose, message: (e as Error).message }); }
+          for (let attempt = 0; ; attempt++) {
+            try {
+              const evs = await runRole(fx, this.state, { models: this.models, roleCall: this.rt.roleCall, researchCall: this.rt.researchCall, signal: this.abort.signal }, ++this.seq);
+              for (const e of evs) { const err = this.apply(e.event, e.actor); if (err) this.out("error", { code: "role_output_rejected", role: fx.role, message: err }); }
+              return;
+            } catch (e) {
+              // One automatic retry for transient failures (timeouts, provider errors); then park the effect for session.retry.
+              if (attempt === 0 && !this.abort.signal.aborted) continue;
+              if (!fx.background) this.failed = fx;
+              this.out("error", { code: "role_failed", role: fx.role, purpose: fx.purpose, message: (e as Error).message, retry: !fx.background });
+              return;
+            }
+          }
         };
         if (fx.background) {
           this.out("research.started", { trigger: fx.purpose, nodeId: (fx.input.node as { id?: string } | undefined)?.id ?? fx.input.nodeId });
@@ -104,8 +123,8 @@ export class SessionDriver {
           const r = await runTutorTurn(fx, { model: this.models.tutor, tutorTurn: this.rt.tutorTurn, state: () => this.state, apply: (ev, actor) => this.apply(ev, actor), signal: this.abort.signal });
           if (r.message) this.out("tutor.done", { text: r.message });
           if (r.fallback) this.out("error", { code: "tutor_fallback", message: `tutor model did not act; Sage ${r.fallback}` });
-          if (!r.acted) this.out("error", { code: "tutor_failed", phase: fx.phase, message: "the tutor could not complete this step; try again or change the tutor model" });
-        } catch (e) { this.out("error", { code: "tutor_failed", phase: fx.phase, message: (e as Error).message }); }
+          if (!r.acted) { this.failed = fx; this.out("error", { code: "tutor_failed", phase: fx.phase, message: "the tutor could not complete this step; retry or change the tutor model", retry: true }); }
+        } catch (e) { this.failed = fx; this.out("error", { code: "tutor_failed", phase: fx.phase, message: (e as Error).message, retry: true }); }
         return;
       }
       case "present_chunk": return this.out("tutor.done", { text: fx.text, kind: "chunk" });

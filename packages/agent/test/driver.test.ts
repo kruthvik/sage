@@ -47,3 +47,17 @@ test("the driver refuses non-learner events from the client (F10)", async () => 
   await d.drain();
   await expect(d.learner({ type: "grade_received", attemptId: "a1", grade: {} as never })).rejects.toThrow(/not a learner action/);
 });
+
+test("a role call that fails twice is parked; session.retry re-runs it and the session moves on", async () => {
+  const ledger = new Ledger(join(await mkdtemp(join(tmpdir(), "sage-")), "s.sqlite"));
+  const base = fakeRuntime(); let fails = 2;
+  const rt = { ...base, roleCall: async (i: Parameters<typeof base.roleCall>[0]) => { if (fails-- > 0) throw new Error("provider timeout"); return base.roleCall(i); } };
+  const events: ServerEvent[] = [];
+  const d = SessionDriver.create(goal(), "s3", ledger, rt, DEFAULT_ROLE_MODELS, e => events.push(e));
+  await d.drain();
+  expect(d.state.phase).toBe("intake");
+  expect(events.find(e => e.event === "error" && (e.data as { role?: string }).role === "planner")?.data).toMatchObject({ code: "role_failed", retry: true });
+  expect(await d.retry()).toBe(true);
+  expect(d.state.phase).toBe("plan_review");
+  expect(await d.retry()).toBe(false);
+});

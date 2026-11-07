@@ -107,6 +107,24 @@
       "learner": false,
       "implemented": true
     },
+    "session.retry": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true,
+      "note": "re-run the role call or tutor turn that failed (error.data.retry = true)"
+    },
     "session.end": {
       "params": {
         "type": "object",

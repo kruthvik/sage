@@ -72,6 +72,7 @@ export function startServer(opts: ServeOptions) {
       }
       case "session.list": return ledger.sessions().map(s => { const first = ledger.engineLog(s)[0]?.event as Extract<EngineEvent, { type: "session_created" }> | undefined; return { sessionId: s, objective: first?.goal.objective, phase: drivers.get(s)?.state.phase }; });
       case "session.resume": { const d = driver(id!); lease(c, id!, p.takeLease === true); return d.view(); }
+      case "session.retry": { const d = driver(id!); const retried = await d.retry(); return { retried, ...d.view() }; }
       case "session.end": { const v = await act({ type: "control", action: "stop" }); leases.delete(id!); return v; }
       case "plan.get": return driver(id!).state.plan ?? null;
       case "plan.edit": return act({ type: "plan_edited", plan: p.plan as never });

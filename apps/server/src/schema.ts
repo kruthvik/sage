@@ -18,6 +18,7 @@ export const METHODS: Record<string, MethodSpec> = {
   "session.create": { params: obj({ goal }, ["goal"]), learner: true },
   "session.list": { params: obj({}) },
   "session.resume": { params: obj({ ...sid, takeLease: { type: "boolean" } }, ["sessionId"]) },
+  "session.retry": { params: obj(sid, ["sessionId"]), learner: true, note: "re-run the role call or tutor turn that failed (error.data.retry = true)" },
   "session.end": { params: obj(sid, ["sessionId"]), learner: true, note: "checkpoint + release lease (engine control.stop)" },
   "plan.get": { params: obj(sid, ["sessionId"]) },
   "plan.edit": { params: obj({ ...sid, plan: { type: "object" } }, ["sessionId", "plan"]), learner: true },
