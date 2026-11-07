@@ -1,0 +1,20 @@
+{
+  "name": "sage",
+  "version": "0.4.0",
+  "type": "module",
+  "description": "A local-first, evidence-grounded AI tutor",
+  "license": "MIT",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "eval": "bun packages/eval/src/run.ts",
+    "eval:smoke": "bun test packages/eval",
+    "check:publication": "bun scripts/check-publication.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.10",
+    "typescript": "5.9.3"
+  }
+}
