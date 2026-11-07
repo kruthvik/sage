@@ -3,6 +3,7 @@
 import type { DriverRuntime } from "../../agent/src/driver.ts";
 import type { RoleCallInput, RoleCallResult, TutorTurnResult } from "../../pi-adapter/src/runtime.ts";
 import { PLANNER_SYSTEM, GENERATOR_SYSTEM, SUMMARIZER_SYSTEM } from "../../agent/src/roles.ts";
+import { CHECKER_SYSTEM } from "../../agent/src/keycheck.ts";
 import { GRADER_SYSTEM } from "../../agent/src/grader.ts";
 
 const res = (text: string): RoleCallResult => ({ text, stopReason: "stop", provider: "fake", model: "fake", ms: 0, usage: { input: Math.ceil(text.length / 4), output: 50, costUsd: 0.0001 } });
@@ -30,6 +31,7 @@ export function fakeRuntime(opts: { nodes?: number } = {}): DriverRuntime {
       return res(JSON.stringify({ items }));
     }
     if (i.system === GRADER_SYSTEM) return res(JSON.stringify({ criteria: [{ index: 0, credit: 1, quote: i.user.split("<<<\n").at(-1)!.split("\n>>>")[0]!.slice(0, 20) }], flaws: [], feedback: "Good." }));
+    if (i.system === CHECKER_SYSTEM) return res(JSON.stringify({ answers: [] })); // shortcut: the fake checker abstains (verdict unknown keeps items); host.test covers real verdicts
     if (i.system === SUMMARIZER_SYSTEM) return res(JSON.stringify({ digest: "Recalls the key terms reliably.", cheatSheet: ["term = definition"] }));
     return res(JSON.stringify({ items: [] }));
   };

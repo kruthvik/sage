@@ -6,7 +6,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 **Authority:** learner methods map to engine events whose emitter is `learner` in `EVENT_ACTOR` (`packages/engine/src/state.ts`), and the driver refuses anything else from a client. The model can never author learner responses, consent, approvals or source acceptance.
 **Lease:** one client drives a session at a time. `session.create` takes the lease, `session.resume { takeLease: true }` takes it over, and closing the socket releases it. Read methods work without the lease.
 **Errors:** `-32700` parse · `-32600` invalid request · `-32601` unknown method · `-32602` invalid params (message lists every problem) · `1001` engine rejected (message is the engine's reason) · `1002` lease held elsewhere · `1003` reserved, not implemented yet · `1004` unknown session.
-**Events** arrive as `{"jsonrpc":"2.0","method":"event","params":{event, sessionId, data}}` to every client attached to the session: `tutor.done`, `item.present`, `grade.result`, `feedback.present`, `repair.required`, `hint.reveal`, `gate.update`, `node.status`, `pace.notice`, `confirm.required`, `plan.changed`, `notice`, `research.started`, `research.ready`, `cost.update`, `export.ready`, `checkpoint`, `error`, `dev.item_rejected`. An `error` event with `data.retry: true` means the session is waiting on a failed role call or tutor turn: call `session.retry`.
+**Events** arrive as `{"jsonrpc":"2.0","method":"event","params":{event, sessionId, data}}` to every client attached to the session: `tutor.done`, `item.present`, `grade.result`, `feedback.present`, `repair.required`, `hint.reveal`, `gate.update`, `node.status`, `pace.notice`, `confirm.required`, `plan.changed`, `plan.fit`, `notice`, `research.started`, `research.ready`, `cost.update`, `export.ready`, `checkpoint`, `error`, `dev.item_rejected`. An `error` event with `data.retry: true` means the session is waiting on a failed role call or tutor turn: call `session.retry`.
 
 ## Methods (implemented)
 
@@ -20,6 +20,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `plan.get` | sessionId | read |  |
 | `plan.edit` | sessionId, plan | learner (lease) |  |
 | `plan.approve` | sessionId | learner (lease) |  |
+| `plan.merge` | sessionId, nodeIds | learner (lease) | before approval: merge nodes into the first listed (`plan.fit` suggests groups) |
 | `diagnostic.skip` | sessionId | learner (lease) |  |
 | `control.teach` | sessionId | learner (lease) |  |
 | `control.morePractice` | sessionId | learner (lease) |  |
@@ -31,7 +32,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `hint.request` | sessionId, level | learner (lease) |  |
 | `chunk.peek` | sessionId | learner (lease) |  |
 | `feedback.ack` | sessionId, attemptId | learner (lease) |  |
-| `grade.dispute` | sessionId, attemptId, argument | learner (lease) |  |
+| `grade.dispute` | sessionId, attemptId, argument | learner (lease) | model grades any time; answer-key items while their feedback shows. A wrong key voids the item, re-scores its attempts (not as evidence) and replaces it |
 | `pace.set` | sessionId, pace | learner (lease) |  |
 | `time.extend` | sessionId, minutes | learner (lease) |  |
 | `reviews.consent` | sessionId, subskillIds | learner (lease) |  |
@@ -83,3 +84,7 @@ Events: `research.started { trigger, nodeId? }`, `research.ready { packId, items
 Triggers (engine-owned, deduplicated per topic/node): intake with no learner sources; node start with uncovered node; planner `knowledgeConfidence: "low"`; blueprint `exam.name`; tutor tool `request_research(question)`.
 Auto-accept happens only when the learner turned on `preview.toggles.autoAcceptResearch`.
 `searchAvailable: false` means no web search/fetch extension is configured: research continues from model knowledge, and every item is `unsourced: true`.
+
+## Plan fit (`plan.fit`)
+
+Sent with every plan proposal, merge, pace change or time extension before approval: `{estMin, budgetMin?, fits, speedUpMin, mergeMin, mergeGroups, text?}`. Estimates come from what each node's gate demands (required dimensions, K, prime, node check), not from the planner. When `fits` is false, the client offers the three options: `time.extend` to `estMin`, `plan.merge` for each of `mergeGroups`, or `pace.set` `speed_up`. The gate is the same in every option.

@@ -63,6 +63,8 @@ export interface Item {
   evidences: Dimension[]; stem: string; choices?: string[]; key?: ItemKey; rubric?: string[];
   distractorRationales?: string[]; hints?: [nudge: string, strategy: string, worked: string];
   format?: ExamFormat; validated?: boolean; keyVerifiedBy?: "calculate" | "model" | "none"; sourceSpans?: string[];
+  /** Set when a learner dispute showed the key was wrong: the item never counts as evidence and is never presented again. */
+  voided?: string;
 }
 
 export type FlawSeverity = "blocking" | "precision" | "polish";

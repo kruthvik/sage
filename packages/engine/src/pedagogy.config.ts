@@ -53,3 +53,11 @@ export const ACTIVITY_EVIDENCE: Record<string, Dimension[]> = {
   free_recall: ["recall", "acquisition"], explain_why: ["explanation"], apply_problem: ["execution", "changed_application"],
   conceptual_mcq: ["selection"], find_the_error: ["explanation", "selection"], method_choice: ["selection"], scrap_work: ["execution"],
 };
+
+// ED-29 (engineering estimate, 2026-11-07; recalibrate from real sessions): learner minutes per independent item by the
+// dimension it evidences, per teaching chunk and per node-check item, and a factor for failed attempts and retries.
+// The plan-fit estimate (pacing.ts) is built from these and the gate itself (required dimensions, K, prime, node check size).
+export const ITEM_MIN: Record<Dimension, number> = { recall: 1, acquisition: 1, selection: 1, explanation: 2, execution: 2, changed_application: 2.5, retention: 1 };
+export const CHUNK_MIN = 1.5;
+export const CHECK_ITEM_MIN = 1.5;
+export const RETRY_FACTOR = 1.2;

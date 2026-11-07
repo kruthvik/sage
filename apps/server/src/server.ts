@@ -77,6 +77,7 @@ export function startServer(opts: ServeOptions) {
       case "plan.get": return driver(id!).state.plan ?? null;
       case "plan.edit": return act({ type: "plan_edited", plan: p.plan as never });
       case "plan.approve": return act({ type: "plan_approved" });
+      case "plan.merge": return act({ type: "plan_nodes_merged", nodeIds: p.nodeIds as string[] });
       case "diagnostic.skip": case "control.teach": return act({ type: "control", action: "teach" });
       case "control.morePractice": return act({ type: "control", action: "morePractice" });
       case "control.advance": return act({ type: "control", action: "advance" });

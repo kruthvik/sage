@@ -198,6 +198,32 @@
       "learner": true,
       "implemented": true
     },
+    "plan.merge": {
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "nodeIds"
+        ],
+        "additionalProperties": false
+      },
+      "learner": true,
+      "implemented": true,
+      "note": "before approval: merge nodes into the first listed (the plan.fit event suggests groups)"
+    },
     "diagnostic.skip": {
       "params": {
         "type": "object",
@@ -443,7 +469,8 @@
         "additionalProperties": false
       },
       "learner": true,
-      "implemented": true
+      "implemented": true,
+      "note": "model grades any time; answer-key items while their feedback shows (a wrong key voids and replaces the item)"
     },
     "pace.set": {
       "params": {
@@ -914,6 +941,7 @@
     "pace.notice",
     "confirm.required",
     "plan.changed",
+    "plan.fit",
     "notice",
     "research.started",
     "research.ready",

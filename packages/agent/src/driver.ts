@@ -4,6 +4,7 @@
 import type { Effect, EngineEvent, EngineState } from "../../engine/src/state.ts";
 import { EVENT_ACTOR, initialState } from "../../engine/src/state.ts";
 import { reduce, EngineError, sessionState, type Actor } from "../../engine/src/loop.ts";
+import { planFit } from "../../engine/src/pacing.ts";
 import type { Ledger } from "../../storage/src/ledger.ts";
 import type { Goal } from "../../core/src/types.ts";
 import type { RoleCallInput, RoleCallResult, TutorTurnResult, TutorTool } from "../../pi-adapter/src/runtime.ts";
@@ -146,8 +147,9 @@ export class SessionDriver {
       case "write_export": return this.out("export.ready", { what: fx.what, available: false, note: "exports arrive in M4" });
       case "checkpoint": return this.out("checkpoint", {});
       case "item_rejected": return this.out("dev.item_rejected", fx);
+      case "plan_fit": return this.out("plan.fit", fx.fit);
     }
   }
 
-  view() { return { session: sessionState(this.state), phase: this.state.phase, plan: this.state.plan, spend: this.state.spend, packs: [...this.state.packs.values()].map(p => ({ id: p.id, trigger: p.trigger, nodeId: p.nodeId, status: p.status, items: p.items.length, conflicts: p.items.filter(i => i.conflictsWithSourceId).length })) }; }
+  view() { return { session: sessionState(this.state), phase: this.state.phase, plan: this.state.plan, fit: planFit(this.state), spend: this.state.spend, packs: [...this.state.packs.values()].map(p => ({ id: p.id, trigger: p.trigger, nodeId: p.nodeId, status: p.status, items: p.items.length, conflicts: p.items.filter(i => i.conflictsWithSourceId).length })) }; }
 }

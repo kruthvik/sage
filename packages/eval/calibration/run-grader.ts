@@ -14,6 +14,8 @@ const [spec, repeatsArg] = process.argv.slice(2);
 const [provider, model] = spec?.split("/") ?? [];
 if (!provider || !model) { console.error("usage: run-grader.ts <provider>/<model> [repeats]"); process.exit(2); }
 const repeats = Math.max(1, Number(repeatsArg ?? 1));
+const reasoning = process.env.REASONING as "minimal" | "low" | "medium" | "high" | undefined; // optional; the gate result is per (model, reasoning)
+const tag = reasoning ? `${model}@${reasoning}` : model!;
 
 const rt = await evalRuntime([provider]);
 
@@ -22,7 +24,7 @@ async function gradeOne(t: Triple): Promise<Row> {
   const row: Row = { id: t.id, target: t.target, scores: [], problems: [], inTok: 0, outTok: 0, cost: 0, ms: 0 };
   for (let i = 0; i < repeats; i++) {
     try {
-      const r = await rt.roleCall({ provider: provider!, model: model!, system: GRADER_SYSTEM, user: graderUser(t, t.response) });
+      const r = await rt.roleCall({ provider: provider!, model: model!, system: GRADER_SYSTEM, user: graderUser(t, t.response), ...(reasoning ? { reasoning } : {}) });
       row.inTok += r.usage.input; row.outTok += r.usage.output; row.ms += r.ms;
       row.cost = r.usage.costUsd === "unknown" || row.cost === "unknown" ? "unknown" : row.cost + r.usage.costUsd;
       const g = parseGrade(r.text, { rubric: t.rubric, evidences: [] });
@@ -57,12 +59,12 @@ const all = [...a, ...c];
 const cost = all.some(r => r.cost === "unknown") ? "unknown" : `$${all.reduce((x, r) => x + (r.cost as number), 0).toFixed(4)}`;
 const A = section("A1–A10 (owner-scored, final; this is the gate)", ANCHORS, a);
 const C = section("C01–C20 (Claude-written, UNREVIEWED; informational until the owner confirms)", GENERATED, c);
-const report = [`# Grader calibration: ${provider}/${model}`, "",
+const report = [`# Grader calibration: ${provider}/${tag}`, "",
   `${new Date().toISOString()} · repeats ${repeats} · ${Math.round((Date.now() - started) / 1000)} s wall · tokens in ${all.reduce((x, r) => x + r.inTok, 0)} / out ${all.reduce((x, r) => x + r.outTok, 0)} · cost ${cost}`,
   "Score = 100 × mean criterion credit − precision deductions (met criteria only) − min(polish, 4), computed in code from the model's judgements.", "",
   ...A.lines, ...C.lines].join("\n");
 mkdirSync(join(import.meta.dir, "..", "..", "..", "eval"), { recursive: true });
-const out = join(import.meta.dir, "..", "..", "..", "eval", `CALIBRATION-${provider}-${model}.md`);
+const out = join(import.meta.dir, "..", "..", "..", "eval", `CALIBRATION-${provider}-${tag}.md`);
 writeFileSync(out, report);
 console.log(report);
 console.log(`\nwrote ${out}`);

@@ -25,12 +25,12 @@ button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 <section><h2>Session</h2><div id="stage"><div class="mute">No session yet.</div></div>
 <div id="answer" hidden><textarea id="resp" rows="4" placeholder="Your answer"></textarea>
 <button class="primary" onclick="submit()">Submit</button><button onclick="call('hint.request',{level:1})">Hint 1</button><button onclick="call('hint.request',{level:2})">Hint 2</button><button onclick="call('hint.request',{level:3})">Hint 3</button><button onclick="call('chunk.peek')">Peek chunk</button></div>
-<div><button onclick="call('plan.approve')">Approve plan</button><button onclick="ack()">OK, next</button><button onclick="call('control.advance')">Advance</button><button onclick="call('control.morePractice')">More practice</button><button onclick="call('control.teach')">Teach me</button><button onclick="call('pace.set',{pace:'speed_up'})">Speed up</button><button onclick="call('control.stop')">Stop</button><button onclick="accept()">Accept research</button><button onclick="state()">State</button></div>
+<div><button onclick="call('plan.approve')">Approve plan</button><button onclick="ack()">OK, next</button><button onclick="call('control.advance')">Advance</button><button onclick="call('control.morePractice')">More practice</button><button onclick="call('control.teach')">Teach me</button><button onclick="call('pace.set',{pace:'speed_up'})">Speed up</button><button onclick="call('control.stop')">Stop</button><button onclick="accept()">Accept research</button><button onclick="state()">State</button><button onclick="dispute()">Dispute grade</button></div>
 </section>
 </div>
 <section><h2>Events</h2><div id="log" aria-live="polite"></div></section>
 </main><script>
-const ws=new WebSocket(location.origin.replace('http','ws')+'/ws'+location.search);let n=0,sid=null,feedback=null,pack=null;const pending={};
+const ws=new WebSocket(location.origin.replace('http','ws')+'/ws'+location.search);let n=0,sid=null,feedback=null,pack=null,fit=null,lastAttempt=null;const pending={};
 const $=id=>document.getElementById(id);
 const log=(t,c)=>{const d=document.createElement('div');d.className='ev '+(c||'');d.textContent=t;$('log').prepend(d)};
 const rpc=(method,params={})=>new Promise((res,rej)=>{const id=++n;pending[id]={res,rej};ws.send(JSON.stringify({jsonrpc:'2.0',id,method,params}))});
@@ -41,10 +41,12 @@ ws.onmessage=m=>{const x=JSON.parse(m.data);if(x.id&&pending[x.id]){x.error?pend
 function show(ev,d){const st=$('stage');const box=h=>{const div=document.createElement('div');div.innerHTML=h;st.prepend(div)};const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
  if(ev==='tutor.done')box('<b>Tutor</b><p>'+esc(d.text)+'</p>');
  if(ev==='item.present'){$('answer').hidden=false;box('<b>'+esc(d.item.activityType)+'</b>'+(d.cueText?'<p><i>'+esc(d.cueText)+'</i></p>':'')+'<p>'+esc(d.item.stem)+'</p>'+(d.item.choices||[]).map((c,i)=>'<button class="choice" onclick="choose('+i+')">'+esc(c)+'</button>').join(''))}
- if(ev==='feedback.present'){feedback=d.attemptId;box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>')}
+ if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>')}
  if(ev==='repair.required')box('<b>Fix this first</b><ul>'+d.flaws.map(f=>'<li>"'+esc(f.quote)+'": '+esc(f.problem)+'</li>').join('')+'</ul>');
  if(ev==='hint.reveal')box('<b>Hint</b><p>'+esc(d.text)+'</p>');
  if(ev==='plan.changed'||ev==='notice'||ev==='pace.notice'||ev==='research.ready')box('<i>'+esc(d.text)+'</i>');
+ if(ev==='plan.changed')call('plan.get').then(p=>p&&box('<b>Plan</b><ol>'+p.nodes.map(n=>'<li>'+esc(n.title)+' <span class="mute">('+n.estMinutes+' min; '+n.subskills.map(x=>esc(x.statement)).join('; ')+')</span></li>').join('')+'</ol>'));
+ if(ev==='plan.fit'&&!d.fits){fit=d;box('<b>Plan does not fit the time</b><p>'+esc(d.text)+'</p><button onclick="extend()">Extend to '+d.estMin+' min</button><button onclick="merge()">Merge nodes</button><button onclick="speed()">Start in Speed-up</button>')}
 }
 async function create(){const r=await rpc('session.create',{goal:{objective:$('obj').value,mode:'cram',timeBudgetMin:+$('mins').value}}).catch(e=>log(e.message,'err'));if(r){sid=r.sessionId;log('session '+sid)}}
 async function resume(id){if(!id)return;sid=id;await rpc('session.resume',{sessionId:id,takeLease:true}).then(()=>state()).catch(e=>log(e.message,'err'))}
@@ -52,5 +54,8 @@ const submit=()=>{call('item.submit',{text:$('resp').value});$('resp').value='';
 const choose=i=>{call('item.submit',{choice:i});$('answer').hidden=true};
 const ack=()=>feedback&&call('feedback.ack',{attemptId:feedback}).then(()=>feedback=null);
 const state=()=>call('state.get');
+const extend=()=>call('time.extend',{minutes:fit.estMin-fit.budgetMin}),speed=()=>call('pace.set',{pace:'speed_up'});
+async function merge(){for(const g of fit.mergeGroups)await call('plan.merge',{nodeIds:g})}
+function dispute(){if(!lastAttempt)return log('nothing to dispute','err');const a=prompt('Why is the grade or answer key wrong?');if(a)call('grade.dispute',{attemptId:lastAttempt,argument:a})}
 async function accept(){const s=await call('research.status');const p=s&&s.packs.find(p=>p.status==='pending');if(p)call('sources.acceptPack',{packId:p.id});else log('no pending research pack')}
 </script></body></html>`;

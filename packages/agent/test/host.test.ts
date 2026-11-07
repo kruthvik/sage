@@ -4,7 +4,7 @@ import { initialState } from "../../engine/src/state.ts";
 import type { RoleCallInput, RoleCallResult } from "../../pi-adapter/src/runtime.ts";
 
 const M = { provider: "p", model: "m" };
-const models: RoleModels = { planner: M, tutor: M, grader: M, generator: M, feynman: M, summarizer: M, researcher: M };
+const models: RoleModels = { planner: M, tutor: M, grader: M, generator: M, feynman: M, summarizer: M, researcher: M, checker: M };
 const reply = (text: string): RoleCallResult => ({ text, stopReason: "stop", provider: "p", model: "m", ms: 1, usage: { input: 10, output: 5, costUsd: "unknown" } });
 
 test("node bank is split into three partition batches, each namespaced", async () => {

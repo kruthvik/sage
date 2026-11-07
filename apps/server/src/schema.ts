@@ -23,6 +23,7 @@ export const METHODS: Record<string, MethodSpec> = {
   "plan.get": { params: obj(sid, ["sessionId"]) },
   "plan.edit": { params: obj({ ...sid, plan: { type: "object" } }, ["sessionId", "plan"]), learner: true },
   "plan.approve": { params: obj(sid, ["sessionId"]), learner: true },
+  "plan.merge": { params: obj({ ...sid, nodeIds: { type: "array", items: str } }, ["sessionId", "nodeIds"]), learner: true, note: "before approval: merge nodes into the first listed (the plan.fit event suggests groups)" },
   "diagnostic.skip": { params: obj(sid, ["sessionId"]), learner: true },
   "control.teach": { params: obj(sid, ["sessionId"]), learner: true },
   "control.morePractice": { params: obj(sid, ["sessionId"]), learner: true },
@@ -34,7 +35,7 @@ export const METHODS: Record<string, MethodSpec> = {
   "hint.request": { params: obj({ ...sid, level: { enum: [1, 2, 3] } }, ["sessionId", "level"]), learner: true },
   "chunk.peek": { params: obj(sid, ["sessionId"]), learner: true },
   "feedback.ack": { params: obj({ ...sid, attemptId: str }, ["sessionId", "attemptId"]), learner: true },
-  "grade.dispute": { params: obj({ ...sid, attemptId: str, argument: { type: "string", minLength: 1, maxLength: 2000 } }, ["sessionId", "attemptId", "argument"]), learner: true },
+  "grade.dispute": { params: obj({ ...sid, attemptId: str, argument: { type: "string", minLength: 1, maxLength: 2000 } }, ["sessionId", "attemptId", "argument"]), learner: true, note: "model grades any time; answer-key items while their feedback shows (a wrong key voids and replaces the item)" },
   "pace.set": { params: obj({ ...sid, pace: { enum: ["normal", "speed_up"] } }, ["sessionId", "pace"]), learner: true },
   "time.extend": { params: obj({ ...sid, minutes: { type: "number", minimum: 1, maximum: 600 } }, ["sessionId", "minutes"]), learner: true },
   "reviews.consent": { params: obj({ ...sid, subskillIds: { type: "array", items: str } }, ["sessionId", "subskillIds"]), learner: true },
@@ -61,7 +62,7 @@ export const METHODS: Record<string, MethodSpec> = {
 };
 
 export const EVENTS = ["tutor.done", "item.present", "grade.result", "feedback.present", "repair.required", "hint.reveal", "gate.update", "node.status", "pace.notice",
-  "confirm.required", "plan.changed", "notice", "research.started", "research.ready", "cost.update", "export.ready", "checkpoint", "error", "dev.item_rejected"] as const;
+  "confirm.required", "plan.changed", "plan.fit", "notice", "research.started", "research.ready", "cost.update", "export.ready", "checkpoint", "error", "dev.item_rejected"] as const;
 
 /** Minimal JSON Schema check for the subset used above (type, enum, required, additionalProperties:false, min/max, items). */
 export function check(schema: Schema, v: unknown, path = "params"): string[] {

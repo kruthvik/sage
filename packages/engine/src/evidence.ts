@@ -39,7 +39,7 @@ export interface GateResult { passed: boolean; stm: number; k: number; checks: n
 
 export function gate(s: SubSkill, mode: Mode, pace: Pace, v: EvidenceView): GateResult {
   const k = K_CHECKS[mode][pace];
-  const mine = v.attempts.filter(a => v.items.get(a.itemId)?.subskillIds.includes(s.id));
+  const mine = v.attempts.filter(a => { const i = v.items.get(a.itemId); return !!i && !i.voided && i.subskillIds.includes(s.id); });
   const observed = new Set<Dimension>(), checkItems = new Set<string>(), families = new Set<string>();
   for (const a of mine) {
     const dims = observedDims(a, s, v);

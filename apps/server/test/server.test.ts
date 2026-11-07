@@ -49,3 +49,8 @@ test("create → plan → approve → first item over the wire; a second client 
   expect((await a.rpc("control.stop", { sessionId })).error?.code).toBe(ERR.lease);
   a.ws.close(); b.ws.close();
 });
+
+test("the dev console's inline script parses", async () => {
+  const { CONSOLE_HTML } = await import("../src/console.ts");
+  expect(() => new Function(CONSOLE_HTML.split("<script>")[1]!.split("</script>")[0]!)).not.toThrow();
+});

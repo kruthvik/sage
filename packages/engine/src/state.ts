@@ -1,5 +1,6 @@
-import type { AssistanceRecord, Attempt, Candidate, Decision, Goal, Grade, Hypothesis, Item, LoopPhase, Plan, ResponseInput, SourcePack, SourcePackItem } from "../../core/src/types.ts";
+import type { AssistanceRecord, Attempt, Candidate, Decision, Goal, Grade, Hypothesis, Item, ItemKey, LoopPhase, Plan, ResponseInput, SourcePack, SourcePackItem } from "../../core/src/types.ts";
 
+import type { PlanFit } from "./pacing.ts";
 export interface Chunk { text: string; nodeId: string; subskillIds: string[]; exampleItemId?: string; at: string; prime?: boolean }
 export interface ReviewCard { subskillId: string; intervalDays: number; dueAt: string; consented: boolean }
 export interface TimelineEntry { at: string; kind: string; text: string }
@@ -33,13 +34,15 @@ export type EngineEvent =
   | { type: "plan_proposed"; plan: Plan }
   | { type: "plan_edited"; plan: Plan }
   | { type: "plan_approved" }
-  | { type: "bank_generated"; purpose: "node" | "diagnostic" | "topup"; nodeId?: string; items: Item[] }
+  | { type: "bank_generated"; purpose: "node" | "diagnostic" | "topup" | "replace"; nodeId?: string; items: Item[] }
   | { type: "chunk_presented"; text: string; subskillIds: string[]; exampleItemId?: string }
   | { type: "item_presented"; itemId: string; adhoc?: Item }
   | { type: "hint_requested"; level: 1 | 2 | 3 }
   | { type: "chunk_peeked" }
   | { type: "response_submitted"; input: ResponseInput; responseEventId: string; latencyMs: number }
   | { type: "grade_received"; attemptId: string; grade: Grade }
+  | { type: "key_dispute_resolved"; attemptId: string; keyWrong: boolean; correctedKey?: ItemKey; reason: string }
+  | { type: "plan_nodes_merged"; nodeIds: string[] }
   | { type: "feedback_acked"; attemptId: string }
   | { type: "grade_disputed"; attemptId: string; argument: string }
   | { type: "move_selected"; candidateId: string; reasonCodes: string[]; nextIntendedMove: string }
@@ -60,7 +63,7 @@ export const EVENT_ACTOR: Record<EngineEvent["type"], "learner" | "role" | "tuto
   session_created: "learner", plan_edited: "learner", plan_approved: "learner", hint_requested: "learner", chunk_peeked: "learner",
   response_submitted: "learner", feedback_acked: "learner", grade_disputed: "learner", control: "learner", pace_set: "learner",
   time_extended: "learner", reviews_consented: "learner", research_pack_accepted: "learner", research_requested: "tutor", research_pack_received: "role",
-  plan_proposed: "role", bank_generated: "role", grade_received: "role", digest_written: "role", role_call_logged: "host",
+  plan_proposed: "role", bank_generated: "role", grade_received: "role", key_dispute_resolved: "role", plan_nodes_merged: "learner", digest_written: "role", role_call_logged: "host",
   chunk_presented: "tutor", item_presented: "tutor", move_selected: "tutor", hypothesis_proposed: "tutor", tick: "host",
 };
 
@@ -81,7 +84,8 @@ export type Effect =
   | { kind: "node_status"; nodeId: string; status: string }
   | { kind: "write_export"; what: "session" | "node" | "final" }
   | { kind: "checkpoint" }
-  | { kind: "item_rejected"; itemId: string; problems: string[] };
+  | { kind: "item_rejected"; itemId: string; problems: string[] }
+  | { kind: "plan_fit"; fit: PlanFit };
 
 export type PublicItem = Pick<Item, "id" | "nodeId" | "activityType" | "stem" | "choices" | "format" | "difficulty">;
 export const publicItem = (i: Item): PublicItem => ({ id: i.id, nodeId: i.nodeId, activityType: i.activityType, stem: i.stem, choices: i.choices, format: i.format, difficulty: i.difficulty });

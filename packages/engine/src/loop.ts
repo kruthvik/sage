@@ -1,9 +1,9 @@
 // The node loop (SPEC §9) as a pure reducer: (state, event, now, actor) → { state, effects }. No I/O, no clock, no randomness.
-import type { Attempt, Candidate, Grade, Item, Plan, PlanNode, ResponseInput, SessionState, SourcePack } from "../../core/src/types.ts";
+import type { Attempt, Candidate, Grade, Item, ItemKey, Plan, PlanNode, ResponseInput, SessionState, SourcePack } from "../../core/src/types.ts";
 import { activeNode, gates, nextCandidates, subskill, view } from "./candidates.ts";
 import { gate, validateGrade, coverageDebt } from "./evidence.ts";
 import { fingerprint, gradeDeterministic, leaksKey, passed, validateItem } from "./items.ts";
-import { accrue, paceNotice, usedMin } from "./pacing.ts";
+import { accrue, gateMinutes, paceNotice, planFit, usedMin } from "./pacing.ts";
 import {
   BANK_SIZE, CHUNK_WORDS, RESEARCH, DIAGNOSTIC, DIGEST_TOKENS, MAX_CUE_LEVEL, NODE_CHECK_SIZE, NODE_CHECK_SIZE_SPEED_UP, NODE_CHECK_THIS_NODE_SHARE,
   POLICY_VERSION, REPAIR_MICRO_MIN, STRUGGLE_FAILURES, STRUGGLE_LATENCY_FACTOR, STRUGGLE_LATENCY_MIN_MS, primeFor, requiredDimensions,
@@ -51,7 +51,14 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       s.plan = acceptPlan(ev.plan, s, s.plan ? s.plan.rev + 1 : 1);
       s.phase = "plan_review";
       fx.push({ kind: "notice", code: "plan_ready", text: `Plan with ${s.plan.nodes.length} nodes ready for review.` });
-      return;
+      return fitNotice(s, fx);
+    }
+    case "plan_nodes_merged": {
+      if (s.phase !== "plan_review" || !s.plan) fail("nodes can only be merged before approval");
+      s.plan = acceptPlan(mergeNodes(s.plan!, ev.nodeIds), s, s.plan!.rev + 1);
+      log(s, now, "plan", `merged ${ev.nodeIds.join("+")}`);
+      fx.push({ kind: "notice", code: "plan_ready", text: `Plan with ${s.plan.nodes.length} nodes ready for review.` });
+      return fitNotice(s, fx);
     }
     case "plan_approved": {
       if (s.phase !== "plan_review" || !s.plan) fail("no plan to approve");
@@ -142,13 +149,30 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
     case "feedback_acked": return ack(s, ev.attemptId, now, fx);
     case "grade_disputed": {
       const a = s.attempts.find(x => x.id === ev.attemptId) ?? fail("unknown attempt");
-      if (!a.grade || a.grade.grader !== "model") fail("only model-graded responses can be disputed");
+      const item = s.items.get(a.itemId)!;
+      // Answer-key items (owner, M3 review): the learner can dispute the key itself; a model re-checks key against their working.
+      const keyDispute = a.grade?.grader === "deterministic" && !!item.key && item.key.kind !== "reference";
+      if (!a.grade || (a.grade.grader !== "model" && !keyDispute)) fail("only model-graded responses and answer-key items can be disputed");
+      if (keyDispute && s.feedbackAttemptId !== a.id) fail("dispute an answer key while its feedback is showing");
+      if (item.voided) fail("this item was already voided");
       if (s.disputed.has(a.id)) fail("one dispute per item");
       if (s.pendingAttemptId) fail("a grade is already pending");
       if (!ev.argument.trim()) fail("say why the grade is wrong");
       s.disputed.add(a.id); s.pendingAttemptId = a.id; s.phase = "grading";
-      fx.push({ kind: "call_role", role: "grader", purpose: "dispute", input: { attemptId: a.id, item: s.items.get(a.itemId), response: a.response, previous: a.grade, argument: ev.argument } });
+      fx.push(keyDispute
+        ? { kind: "call_role", role: "grader", purpose: "key_dispute", input: { attemptId: a.id, item, response: a.response, argument: ev.argument } }
+        : { kind: "call_role", role: "grader", purpose: "dispute", input: { attemptId: a.id, item, response: a.response, previous: a.grade, argument: ev.argument } });
       return;
+    }
+    case "key_dispute_resolved": {
+      if (ev.attemptId !== s.pendingAttemptId || !s.disputed.has(ev.attemptId)) fail("no key dispute pending for that attempt");
+      const a = s.attempts.find(x => x.id === ev.attemptId)!;
+      const item = s.items.get(a.itemId)!;
+      if (!item.key || item.key.kind === "reference" || a.grade?.grader !== "deterministic") fail("not an answer-key dispute");
+      if (ev.correctedKey && ev.correctedKey.kind !== item.key!.kind) fail("the corrected key must keep the item's key kind");
+      s.pendingAttemptId = undefined; s.phase = "feedback";
+      if (!ev.keyWrong) { fx.push({ kind: "notice", code: "dispute_rejected", text: `The answer key stands: ${ev.reason}` }); return; }
+      return voidItem(s, item, ev.reason, ev.correctedKey, now, fx);
     }
     case "move_selected": {
       if (s.phase !== "adapt") fail("moves are selected in the adapt phase");
@@ -180,7 +204,9 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
     case "control": return control(s, ev, now, fx);
     case "pace_set": {
       s.goal.pace = ev.pace; // K and teaching compress; nodes, subskills and required dimensions are untouched (SPEC §11).
+      for (const n of s.plan?.nodes ?? []) if (!DONE.has(n.status)) n.estMinutes = gateMinutes(n, s.goal.mode, ev.pace);
       log(s, now, "pace", ev.pace);
+      if (s.phase === "plan_review") fitNotice(s, fx);
       fx.push({ kind: "notice", code: "pace", text: ev.pace === "speed_up" ? "Speed up: one independent check per subskill, no prime step, shorter node checks. No topics are skipped." : "Normal pace." });
       return;
     }
@@ -188,6 +214,7 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       if (!(ev.minutes > 0)) fail("minutes must be positive");
       s.goal.timeBudgetMin = (s.goal.timeBudgetMin ?? Math.ceil(usedMin(s))) + ev.minutes;
       log(s, now, "pace", `extended +${ev.minutes} min`);
+      if (s.phase === "plan_review") fitNotice(s, fx);
       return;
     }
     case "reviews_consented": {
@@ -234,7 +261,6 @@ function acceptPlan(plan: Plan, s: EngineState, rev: number): Plan {
   for (const n of nodes) {
     if (ids.has(n.id)) fail(`duplicate node ${n.id}`); ids.add(n.id);
     if (!n.subskills?.length) fail(`node ${n.id} has no subskills`);
-    if (!(n.estMinutes > 0)) fail(`node ${n.id} needs estMinutes`);
     for (const x of n.subskills) { if (subIds.has(x.id)) fail(`duplicate subskill ${x.id}`); subIds.add(x.id); }
   }
   const edges: [string, string][] = [...(plan.edges ?? []), ...nodes.flatMap(n => (n.prerequisites ?? []).map(p => [p, n.id] as [string, string]))];
@@ -248,16 +274,61 @@ function acceptPlan(plan: Plan, s: EngineState, rev: number): Plan {
   return {
     rev, edges,
     nodes: nodes.map((n, i) => ({
-      ...n, order: n.order ?? i, prerequisites: prereqs(n.id), status: prereqs(n.id).length ? "locked" : "ready",
+      ...n, order: n.order ?? i, prerequisites: prereqs(n.id), status: prereqs(n.id).length ? "locked" : "ready", estMinutes: gateMinutes(n, s.goal.mode, s.goal.pace),
       subskills: n.subskills.map(x => ({ ...x, nodeId: n.id, requiredDimensions: requiredDimensions(s.goal.mode, x) })),
     })),
   };
 }
 
+function fitNotice(s: EngineState, fx: Effect[]) { const fit = planFit(s); if (fit) fx.push({ kind: "plan_fit", fit }); }
+
+/** Merge nodes into the first listed (learner choice at plan review): subskills concatenated, edges redirected, self-edges dropped. */
+function mergeNodes(p: Plan, ids: string[]): Plan {
+  const set = new Set(ids);
+  if (set.size < 2 || ids.some(id => !p.nodes.some(n => n.id === id))) fail("merge needs two or more known nodes");
+  const keep = ids[0]!;
+  const to = (id: string) => set.has(id) ? keep : id;
+  const parts = ids.map(id => p.nodes.find(n => n.id === id)!);
+  const merged: PlanNode = { ...parts[0]!, title: parts.map(n => n.title).join(" + "), subskills: parts.flatMap(n => n.subskills),
+    misconceptionsToProbe: parts.flatMap(n => n.misconceptionsToProbe).slice(0, 3), examWeight: parts.some(n => n.examWeight === "high") ? "high" : parts[0]!.examWeight,
+    knowledgeConfidence: parts.some(n => n.knowledgeConfidence === "low") ? "low" : parts[0]!.knowledgeConfidence, prerequisites: parts.flatMap(n => n.prerequisites) };
+  const nodes = p.nodes.filter(n => !set.has(n.id) || n.id === keep).map(n => n.id === keep ? merged : n)
+    .map(n => ({ ...n, prerequisites: [...new Set(n.prerequisites.map(to))].filter(x => x !== n.id) }));
+  const edges = [...new Map(p.edges.map(([a, b]) => [to(a), to(b)] as [string, string]).filter(([a, b]) => a !== b).map(e => [e.join(">"), e] as const)).values()];
+  return { ...p, nodes, edges };
+}
+
+function inputOf(a: Attempt, key: ItemKey): ResponseInput {
+  return key.kind === "choice" ? { kind: "choice", index: Number(/choice (\d+)/.exec(a.response)?.[1] ?? -1) } : { kind: "text", text: a.response };
+}
+
+/** A successful key dispute: the item is voided (never evidence, never shown again), every attempt on it is re-scored
+ * against the corrected key (kept for the record, not as evidence), cue ladders on it are dropped, and a replacement is generated. */
+function voidItem(s: EngineState, item: Item, reason: string, corrected: ItemKey | undefined, now: string, fx: Effect[]) {
+  item.voided = reason; item.validated = false;
+  for (const [id, l] of s.cue) if (l.itemId === item.id) s.cue.delete(id);
+  for (const a of s.attempts.filter(x => x.itemId === item.id && x.grade)) {
+    if (!corrected) continue;
+    const g = gradeDeterministic({ ...item, key: corrected }, inputOf(a, corrected))!;
+    a.supersededGrades = [...(a.supersededGrades ?? []), a.grade!];
+    a.grade = { ...g, disputed: true, dimensionsObserved: [] };
+    if (a.id === s.feedbackAttemptId) fx.push({ kind: "present_feedback", attemptId: a.id, grade: a.grade });
+  }
+  log(s, now, "item", `${item.id} voided: ${reason}`);
+  fx.push({ kind: "notice", code: "item_voided", text: `You were right: this item's answer key was wrong (${reason}). It is re-scored for the record, removed, and replaced; it counts neither for nor against you.` });
+  const node = s.plan?.nodes.find(n => n.id === item.nodeId);
+  if (node) for (const x of node.subskills.filter(x => item.subskillIds.includes(x.id))) {
+    const r = gate(x, s.goal.mode, s.goal.pace, view(s));
+    fx.push({ kind: "gate_update", nodeId: node.id, subskillId: x.id, passed: r.passed, stm: r.stm, missing: r.missing });
+  }
+  fx.push({ kind: "call_role", role: "generator", purpose: "replace", input: { nodeId: item.nodeId, partition: item.partition, count: 1, subskillIds: item.subskillIds, activityType: item.activityType } });
+}
+
 const outline = (p: Plan) => p.nodes.map(n => ({ id: n.id, title: n.title, subskills: n.subskills.map(x => ({ id: x.id, statement: x.statement, kind: x.kind })) }));
 
 function acceptBank(s: EngineState, ev: Extract<EngineEvent, { type: "bank_generated" }>, now: string, fx: Effect[]): void {
-  const expecting = ev.purpose === "diagnostic" ? s.diagnostic.status === "pending" : ev.purpose === "node" ? s.phase === "bank" && ev.nodeId === s.activeNodeId : s.phase === "node_check" && !s.check;
+  const expecting = ev.purpose === "diagnostic" ? s.diagnostic.status === "pending" : ev.purpose === "node" ? s.phase === "bank" && ev.nodeId === s.activeNodeId
+    : ev.purpose === "replace" ? !!s.plan?.approvedAt : s.phase === "node_check" && !s.check;
   if (!expecting) fail(`not expecting a ${ev.purpose} bank`);
   const subIds = new Set(s.plan!.nodes.flatMap(n => n.subskills.map(x => x.id)));
   for (const raw of ev.items) {
@@ -270,6 +341,7 @@ function acceptBank(s: EngineState, ev: Extract<EngineEvent, { type: "bank_gener
     item.validated = true; aliasFamily(s, item); s.items.set(item.id, item);
   }
   if (ev.purpose === "diagnostic") { s.diagnostic = { status: "running", startedAt: now }; s.phase = "diagnostic"; fx.push(turn(s)); return; }
+  if (ev.purpose === "replace") return; // fills the bank only; never changes the phase
   if (ev.purpose === "topup") return buildCheck(s, activeNode(s)!, false, now, fx);
   const node = activeNode(s)!;
   s.phase = node.subskills.some(x => primeFor(s.goal.mode, s.goal.pace, x)) ? "prime" : "teach";
@@ -450,7 +522,7 @@ function advanceCheck(s: EngineState, now: string, fx: Effect[]): void {
   if (++c.idx < c.itemIds.length) return present(s, s.items.get(c.itemIds[c.idx]!)!, 0, c.final ? "final" : "node_check", now, fx);
   s.check = undefined;
   if (c.final) return endSession(s, now, fx);
-  const failed = c.itemIds.filter(id => !passed(s.attempts.filter(a => a.itemId === id).at(-1)?.grade)).map(id => s.items.get(id)!);
+  const failed = c.itemIds.filter(id => !s.items.get(id)!.voided && !passed(s.attempts.filter(a => a.itemId === id).at(-1)?.grade)).map(id => s.items.get(id)!);
   for (const n of new Set(failed.filter(i => i.nodeId !== c.nodeId).map(i => i.nodeId))) {
     const earlier = s.plan!.nodes.find(x => x.id === n)!;
     earlier.status = "needs_repair";
