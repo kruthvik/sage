@@ -2,7 +2,7 @@
 // v3 ran a tool-less child session per role call; pi 1.5's ModelRuntime.complete() gives the same single request with less machinery.
 import { mkdirSync } from "node:fs";
 import { type PiSdk, type SagePaths } from "./sdk.ts";
-import { loadPiWithFallback } from "./update.ts";
+import { isolateProcess, loadPiWithFallback } from "./update.ts";
 
 export interface SageRuntimeOptions {
   paths: SagePaths;
@@ -20,10 +20,16 @@ export interface TutorTool { name: string; label: string; description: string; p
 export interface TutorTurnResult { ended: boolean; calls: { name: string; params: Record<string, unknown>; result: string }[]; text: string; usage: RoleCallResult["usage"]; ms: number }
 
 export const ROLE_MAX_OUTPUT_TOKENS = 4096;
+const nstr = { type: ["string", "null"] };
+/** Researcher output schema (the submit_pack tool). The engine still re-validates every item. */
+export const PACK_SCHEMA = { type: "object", required: ["items"], properties: { items: { type: "array", maxItems: 8, items: { type: "object", required: ["title", "relevance", "spans", "reliability"],
+  properties: { title: { type: "string" }, url: nstr, citation: nstr, relevance: { type: "string" }, spans: { type: "array", items: { type: "string" } }, reliability: { type: "string" },
+    nodeId: nstr, conflictsWithSourceId: nstr, unsourced: { type: "boolean" } } } } } } as const;
 export const ROLE_DEADLINE_MS = 60_000;
 export const ROLE_MAX_INPUT_CHARS = 32_768;
 
 export async function createSageRuntime(opts: SageRuntimeOptions) {
+  isolateProcess(opts.paths); // temp files and npm cache under SAGE_HOME
   const { sdk, notice } = await loadPiWithFallback(opts.paths);
   const agentDir = opts.agentDir ?? opts.paths.agent;
   mkdirSync(agentDir, { recursive: true });
@@ -79,7 +85,7 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
               const name = (ev as { toolName: string }).toolName;
               if (name === "web_search") return ++budget.searches > budget.limits.maxSearches ? { block: true, reason: `search limit ${budget.limits.maxSearches} reached; write the pack now` } : undefined;
               if (name === "fetch_content") return ++budget.fetches > budget.limits.maxFetches ? { block: true, reason: `fetch limit ${budget.limits.maxFetches} reached; write the pack now` } : undefined;
-              if (name === "get_search_content") return undefined; // reads already-fetched results; no network
+              if (name === "get_search_content" || name === "submit_pack") return undefined; // reads cached results / returns the pack; no network
               return { block: true, reason: "the researcher may only search and fetch" };
             });
           } }] },
@@ -88,8 +94,12 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
       const model = svc.modelRuntime.getModel(input.provider, input.model);
       if (!model) throw new Error(`model ${input.provider}/${input.model} is not available; check settings or auth`);
       budget = { searches: 0, fetches: 0, limits: input.limits }; researchSystem = input.system;
+      // The pack comes back as tool-call arguments validated against PACK_SCHEMA, not as free-form JSON in prose (flash ended with prose).
+      let submitted: unknown;
+      const submit = sdk.defineTool({ name: "submit_pack", label: "Submit pack", description: "Submit the finished source pack. Call exactly once, when you are done searching.", parameters: PACK_SCHEMA as never,
+        async execute(_id, params) { submitted = params; return { content: [{ type: "text" as const, text: "ok: pack received; stop now" }], details: undefined }; } });
       const { session } = await sdk.createAgentSessionFromServices({ services: svc, sessionManager: sdk.SessionManager.inMemory(opts.paths.home), model,
-        tools: ["web_search", "fetch_content", "get_search_content"] });
+        customTools: [submit] as never, tools: ["web_search", "fetch_content", "get_search_content", "submit_pack"] });
       const timer = setTimeout(() => void session.abort(), input.timeoutMs ?? 4 * ROLE_DEADLINE_MS);
       const relay = () => void session.abort();
       input.signal?.addEventListener("abort", relay, { once: true });
@@ -101,7 +111,7 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
         const msgs = session.messages.filter(m => m.role === "assistant") as { content: { type: string; text?: string }[]; usage?: { input: number; output: number; cost?: { total?: number } }; stopReason: string }[];
         const last = msgs.at(-1);
         if (!last || last.stopReason !== "stop") throw new Error(`research did not finish (${last?.stopReason ?? "no reply"})`);
-        const text = last.content.filter(p => p.type === "text").map(p => p.text ?? "").join("\n");
+        const text = submitted !== undefined ? JSON.stringify(submitted) : last.content.filter(p => p.type === "text").map(p => p.text ?? "").join("\n");
         const tot = msgs.reduce((a, m) => ({ input: a.input + (m.usage?.input ?? 0), output: a.output + (m.usage?.output ?? 0),
           cost: typeof m.usage?.cost?.total === "number" && a.cost !== "unknown" ? a.cost + m.usage.cost.total : "unknown" as const }), { input: 0, output: 0, cost: 0 as number | "unknown" });
         return { text, stopReason: last.stopReason, provider: input.provider, model: input.model, ms: Date.now() - started,
