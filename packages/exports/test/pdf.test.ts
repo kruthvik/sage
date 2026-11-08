@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { access, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PDFDocument } from "pdf-lib";
+import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import { exportMarkdownPdf, type MarkdownPdfOptions } from "../src/pdf.ts";
 
 const roots: string[] = [];
@@ -49,11 +49,15 @@ test("concurrent publication creates exactly one verified PDF and never overwrit
   expect((await PDFDocument.load(bytes)).getPageCount()).toBe(winner.value.pages); expect((await readdir(f.root)).filter(name => name.startsWith(".sage-pdf-"))).toEqual([]);
 }, 15000);
 
-test("built-in font transliterates maths symbols and counts the rest as replaced", async () => {
+test("default: bundled DejaVu shows maths symbols as themselves; LaTeX prints as Unicode; only CJK is replaced", async () => {
   const f = await fixture();
-  const r = await exportMarkdownPdf({ ...f.options, content: "∫ x dx → x²/2 ≤ ∞ and 漢" });
-  expect(r.replacedChars).toBe(1); // 漢 only; ∫ → ≤ ∞ have spellings, ² is in WinAnsi
-  expect((await readFile(f.options.outputPath)).subarray(0, 5).toString()).toBe("%PDF-");
+  const r = await exportMarkdownPdf({ ...f.options, content: "∫ x dx → x²/2 ≤ ∞, ∑ ∂ √ ≠ ± π θ Δ ∈ ∀ ⇒ ≈ ₀₁ ⁿ ∛\n\nInline: $\\frac{1}{4} \\le x^2$ and $$\\sqrt{b^2-4ac}$$\n\n```\ncode: x^2 ≤ 1\n```\n\nand 漢" });
+  expect(r.replacedChars).toBe(1); // 漢 only
+  const bytes = await readFile(f.options.outputPath);
+  expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+  const doc = await PDFDocument.load(bytes), fonts = new Set<string>();
+  for (const [, obj] of doc.context.enumerateIndirectObjects()) if (obj instanceof PDFDict && obj.get(PDFName.of("Type")) === PDFName.of("Font")) fonts.add(String(obj.get(PDFName.of("BaseFont"))).replace(/^\/(?:[A-Z]{6}\+)?|-\d+$/g, ""));
+  expect([...fonts].sort()).toEqual(["DejaVuSans", "DejaVuSansMono"]); // both embedded (subset), no Helvetica
 }, 15000);
 
 test("an explicit local TTF keeps maths glyphs; glyphs it lacks fall back instead of failing", async () => {

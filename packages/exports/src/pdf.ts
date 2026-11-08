@@ -1,5 +1,6 @@
 // Ported from v3 runtime/src/markdown-pdf.ts (V3_PORT: keep): isolated subprocess, bounded, verified, never overwrites.
-import { lstat, realpath, open, mkdtemp, writeFile, link, rm } from "node:fs/promises";
+import { lstat, realpath, open, mkdtemp, writeFile, link, rm, readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { dirname, basename, resolve, parse, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +9,8 @@ const hash = (v: Uint8Array) => createHash("sha256").update(v).digest("hex");
 export interface MarkdownPdfOptions {
   content: string; mediaType?: "text/markdown" | "text/plain"; outputPath: string;
   artifactRevisionId: string; origin: "learner" | "tutor" | "source" | "unknown"; provenance: string;
-  /** Explicit local font; never inferred from global/user directories. Caller must have embedding rights. */
+  /** Explicit local font; never inferred from global/user directories. Caller must have embedding rights. Without it, the bundled
+   * DejaVu Sans / Sans Mono are used (free to embed; broad maths coverage). */
   fontPath?: string; timeoutMs?: number; maxPages?: number; signal?: AbortSignal;
 }
 export interface MarkdownPdfReceipt { fullPath: string; fileHash: string; contentHash: string; artifactRevisionId: string; origin: MarkdownPdfOptions["origin"]; pages: number; bytesWritten: number; replacedChars: number; renderer: "pdf-lib/1.17.1" }
@@ -48,6 +50,17 @@ function outputName(path: string) {
   return target;
 }
 
+const FONT_MAX = 8388608;
+const sfnt = (b: Uint8Array) => Buffer.from(b.subarray(0, 4)).toString("hex") === "00010000" || Buffer.from(b.subarray(0, 4)).toString("ascii") === "OTTO";
+/** Sage's own dependency (dejavu-fonts-ttf), resolved from this package, never from user/system dirs. Package managers hard-link
+ * these files, so they're read by size + signature instead of the unlinked-file check used for owner fonts. Missing ⇒ Helvetica. */
+async function bundledFonts(): Promise<[Uint8Array, Uint8Array] | undefined> {
+  let dir: string;
+  try { dir = join(dirname(createRequire(import.meta.url).resolve("dejavu-fonts-ttf/package.json")), "ttf"); } catch { return undefined; }
+  const read = async (name: string) => { const b = await readFile(join(dir, name)); if (b.length > FONT_MAX || !sfnt(b)) throw new Error("bundled font is invalid"); return b; };
+  try { return [await read("DejaVuSans.ttf"), await read("DejaVuSansMono.ttf")]; } catch (e) { if (missing(e)) return undefined; throw e; }
+}
+
 /** Local export. No browser, provider, active PDF actions, URL/file resource loading or outcome writes. */
 export async function exportMarkdownPdf(options: MarkdownPdfOptions): Promise<MarkdownPdfReceipt> {
   if (options.signal?.aborted) throw new Error("PDF export cancelled before rendering");
@@ -57,21 +70,22 @@ export async function exportMarkdownPdf(options: MarkdownPdfOptions): Promise<Ma
   if (!Number.isInteger(timeout) || timeout < 1 || timeout > 10000 || !Number.isInteger(maxPages) || maxPages < 1 || maxPages > 128) throw new Error("Invalid PDF worker time/page bound");
   const requested = outputName(options.outputPath); const parent = await regularDirectory(dirname(requested)); const target = join(parent.path, basename(requested));
   try { await lstat(target); throw new Error("PDF conflict: existing files are never overwritten"); } catch (error) { if (!missing(error)) throw error; }
-  let font: Uint8Array | undefined;
+  let font: Uint8Array | undefined, mono: Uint8Array | undefined;
   if (options.fontPath) {
     const selected = resolve(options.fontPath); if (![".ttf", ".otf"].includes(extname(selected).toLowerCase())) throw new Error("Choose an explicit local TTF/OTF font");
-    await regularDirectory(dirname(selected)); font = await boundedFile(selected, 8388608);
-    if (Buffer.from(font.subarray(0, 4)).toString("hex") !== "00010000" && Buffer.from(font.subarray(0, 4)).toString("ascii") !== "OTTO") throw new Error("Invalid TTF/OTF font signature");
-  }
+    await regularDirectory(dirname(selected)); font = await boundedFile(selected, FONT_MAX);
+    if (!sfnt(font)) throw new Error("Invalid TTF/OTF font signature");
+  } else [font, mono] = (await bundledFonts()) ?? [];
   const contentHash = hash(Buffer.from(options.content, "utf8"));
-  const job = JSON.stringify({ content: options.content, mediaType: options.mediaType ?? "text/markdown", artifactRevisionId: options.artifactRevisionId, origin: options.origin, provenance: Array.from(options.provenance).slice(0, 1900).join("") + (Array.from(options.provenance).length > 1900 ? " [truncated]" : ""), contentHash, font: !!font, maxPages });
+  const job = JSON.stringify({ content: options.content, mediaType: options.mediaType ?? "text/markdown", artifactRevisionId: options.artifactRevisionId, origin: options.origin, provenance: Array.from(options.provenance).slice(0, 1900).join("") + (Array.from(options.provenance).length > 1900 ? " [truncated]" : ""), contentHash, fonts: mono ? "two" : font ? "one" : "none", maxPages });
   if (Buffer.byteLength(job, "utf8") > 262144) throw new Error("PDF serialized job exceeds bound");
   const directory = await mkdtemp(join(parent.path, ".sage-pdf-")); const output = join(directory, "output.pdf"); let summary: Summary | undefined;
   try {
-    const input = join(directory, "input.json"), fontPath = join(directory, "font.bin"); await writeFile(input, job, { flag: "wx", mode: 0o600 }); if (font) await writeFile(fontPath, font, { flag: "wx", mode: 0o600 });
+    const input = join(directory, "input.json"), fontPath = join(directory, "font.bin"), monoPath = join(directory, "mono.bin"); await writeFile(input, job, { flag: "wx", mode: 0o600 });
+    if (font) await writeFile(fontPath, font, { flag: "wx", mode: 0o600 }); if (mono) await writeFile(monoPath, mono, { flag: "wx", mode: 0o600 });
     const env: Record<string, string> = { HOME: directory, USERPROFILE: directory, TEMP: directory, TMP: directory, XDG_CACHE_HOME: directory, BUN_RUNTIME_TRANSPILER_CACHE_PATH: join(directory, "cache"), PI_OFFLINE: "1", PI_TELEMETRY: "0" };
     for (const key of ["PATH", "SystemRoot"]) if (process.env[key]) env[key] = process.env[key]!;
-    const child = Bun.spawn([process.execPath, fileURLToPath(new URL("./pdf-worker.ts", import.meta.url)), input, output, fontPath], { cwd: directory, env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    const child = Bun.spawn([process.execPath, fileURLToPath(new URL("./pdf-worker.ts", import.meta.url)), input, output, fontPath, monoPath], { cwd: directory, env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
     let timedOut = false, cancelled = false;
     const cancel = () => { cancelled = true; if (child.exitCode === null) child.kill("SIGKILL"); };
     const timer = setTimeout(() => { if (child.exitCode === null) { timedOut = true; child.kill("SIGKILL"); } }, timeout);

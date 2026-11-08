@@ -18,9 +18,9 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 | M1 Pure engine + ledger | **done** | `bun test`: 36 pass · `tsc` clean · `bun run eval` all 6 personas, 0 reducer errors |
 | M2 Agent layer ◆ | **done**; owner chose role defaults (sol: planner/tutor/grader; flash: generator/feynman/summarizer/researcher) | `bun test` 63 pass · grader A1–A10 PASS on sol · commits `4c1339e`…`a25f576` |
 | M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
-| M4 Exports | **done** (PDF maths: owner chose embedding a TTF they supply, via `settings.exportFontPath`) | `bun test` 94 pass · `tsc` clean |
+| M4 Exports | **done** (PDF maths: bundled DejaVu fonts plus LaTeX → Unicode; an owner font is optional) | `bun test` 94 pass · `tsc` clean |
 | M5 Activities ◆ | **done** (owner batch answered 2026-11-08) | `bun test` 102 pass · `tsc` clean · live flash vision probe |
-| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 127 pass, 1 skipped (timed YouTube paste fixture, optional) · `tsc` clean · local Tesseract OCR verified |
+| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 129 pass, 1 skipped (timed YouTube paste fixture, optional) · `tsc` clean · local Tesseract OCR verified |
 
 M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechanisms, 27 engineering defaults), `docs/DESIGN.md`, `docs/LIBRARY_CANDIDATES.md`.
 
@@ -123,7 +123,7 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - Never overwrites user edits: `.sage-export.json` stores the hash of what Sage last wrote. Any file whose hash differs is skipped and reported as `userEdited`. Writes are atomic.
 - PDFs use the v3 pdf-lib worker port (isolated subprocess, bounded, never overwrites). The v3 bound tests are ported.
 - API: `export.get` (writes, then returns the result and `session.md`); `usage.set {enabled}` and `usage.get` totals `{sessions, hours, calls}`. These are local counters from the ledger, on by default, and nothing is uploaded. The dev console has an Export button and a Usage counters checkbox.
-- **Finding (pdf-lib vs Typst):** the built-in Helvetica can't show maths symbols. The worker writes the common ones as ASCII (∫ → "integral", ≤ → "<=", π → "pi"). Anything else prints as "?", with a notice on the page; the Markdown keeps the exact text. Real maths typesetting needs Typst or an embedded Unicode font, either one a new dependency (owner ask).
+- **Finding (pdf-lib vs Typst):** the built-in Helvetica can't show maths symbols. The worker writes the common ones as ASCII (∫ → "integral", ≤ → "<=", π → "pi"). Anything else prints as "?", with a notice on the page; the Markdown keeps the exact text. Real maths typesetting needs Typst or an embedded Unicode font, either one a new dependency (owner ask). **Resolved 2026-11-08:** the owner said not to require a font from them. PDFs now embed **DejaVu Sans / Sans Mono** (`dejavu-fonts-ttf` 2.37.3, Bitstream Vera licence: free to embed and redistribute; ~1.1 MB, subset per PDF). Common LaTeX (`\frac`, `\sqrt`, `^`/`_`, Greek letters, relations, arrows, `\int`/`\sum`, `\left`/`\right`, `\text`) becomes Unicode in the raw source before Markdown parsing, leaving code spans and blocks alone. Dollar amounts, paths and snake_case identifiers stay as written. This is checked by extracting the text from a rendered PDF. It's linear text, not typeset maths: stacked fractions and matrices print as `a/b` and rows.
 
 ### M5: what exists (2026-11-08)
 - **Library activities**:
@@ -188,7 +188,7 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
   - Library activities for Phase 1 are ordering, matching and contrasting cases. Plot/param sims and labeling/concept maps are deferred.
   - scrap_work photos are read by **flash**, with consent per message, and the learner confirms the transcription before scoring.
   - The `---js` module is **skipped** for Phase 1.
-  - PDF maths uses an **owner-supplied TTF** (settings `exportFontPath`).
+  - PDF maths: owner-supplied TTF (settings `exportFontPath`), later replaced by the bundled DejaVu default (see M4).
   - Deviation (flag if wrong): the three new activities are structured items, so they render natively in the client (registry `renders: native`) rather than through a DSL port. The DSL is only needed for model-authored visuals, which are deferred.
 
 - **Owner reply 2 (2026-11-07). Overrides SPEC where they conflict.**
@@ -224,9 +224,9 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
-2. **Owner:** copy a Unicode TTF (e.g. one with maths symbols) into a plain folder and set `settings.exportFontPath` to it. Windows system fonts are hard-linked and refused, so copy rather than point at C:\Windows\Fonts.
-3. Fix whatever the real session turns up. Phase 1's build items are otherwise done.
+1. Live-test the researcher's `submit_pack` (never run live). This includes the new YouTube publisher-transcript trigger.
+2. The real Cram session waits until there's a GUI (owner 2026-11-08: the dev console is too hard to use, and no GUI yet).
+3. The remaining eval notes: flash grader JSON failures after retry, and ww1 long-form passes nothing.
 
 ## Commands
 

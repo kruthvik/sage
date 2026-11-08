@@ -5,10 +5,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { PDFDocument, StandardFonts, PDFName, rgb, type PDFFont } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { marked } from "marked";
+import { latexToUnicode } from "./latex.ts";
 import { createHash } from "node:crypto";
 const hash = (v: Uint8Array) => createHash("sha256").update(v).digest("hex");
 
-interface Job { content: string; mediaType: "text/markdown" | "text/plain"; artifactRevisionId: string; origin: string; provenance: string; contentHash: string; font: boolean; maxPages: number }
+interface Job { content: string; mediaType: "text/markdown" | "text/plain"; artifactRevisionId: string; origin: string; provenance: string; contentHash: string; fonts: "none" | "one" | "two"; maxPages: number }
 interface Block { text: string; size: number; mono?: boolean }
 const text = (value: unknown): string => typeof value === "string" ? value : "";
 function object(value: unknown): Record<string, unknown> {
@@ -20,7 +21,7 @@ function validJob(v: unknown): asserts v is Job {
   const ok = typeof j.content === "string" && j.content.length <= 250000 && (j.mediaType === "text/markdown" || j.mediaType === "text/plain")
     && typeof j.artifactRevisionId === "string" && j.artifactRevisionId.length >= 1 && j.artifactRevisionId.length <= 180
     && ["learner", "tutor", "source", "unknown"].includes(String(j.origin)) && typeof j.provenance === "string" && j.provenance.length <= 2000
-    && typeof j.contentHash === "string" && /^[a-f0-9]{64}$/.test(j.contentHash) && typeof j.font === "boolean"
+    && typeof j.contentHash === "string" && /^[a-f0-9]{64}$/.test(j.contentHash) && ["none", "one", "two"].includes(String(j.fonts))
     && Number.isInteger(j.maxPages) && (j.maxPages as number) >= 1 && (j.maxPages as number) <= 128 && Object.keys(j).length === 8;
   if (!ok) throw new Error("Invalid PDF worker job");
 }
@@ -34,8 +35,13 @@ const TRANSLIT: Record<string, string> = {
 };
 
 /** Read-only token conversion. Never render HTML, attach actions, dereference URLs or load images. */
+/** LaTeX maths → Unicode on the raw source, before Markdown parsing (which would eat "\," and read x_n…y_n as emphasis).
+ * Fenced code blocks and inline code spans are left exactly as written. */
+const mathSource = (md: string) => md.split(/(^(?:```|~~~)[^\n]*\n[\s\S]*?^(?:```|~~~)[ \t]*$|`[^`\n]+`)/m).map((part, i) => i % 2 ? part : latexToUnicode(part)).join("");
+
 function blocks(content: string, plain: boolean): Block[] {
-  if (plain) return [{ text: content, size: 11 }];
+  if (plain) return [{ text: latexToUnicode(content), size: 11 }];
+  content = mathSource(content);
   let count = 0;
   function bound(depth: number) { if (++count > 10000 || depth > 24) throw new Error("Markdown token/depth bound exceeded"); }
   function inline(nodes: unknown, depth: number): string {
@@ -74,7 +80,7 @@ function blocks(content: string, plain: boolean): Block[] {
   return output;
 }
 
-async function render(input: string, output: string, fontPath: string) {
+async function render(input: string, output: string, fontPath: string, monoPath: string) {
   const bytes = await readFile(input); if (bytes.length > 262144) throw new Error("PDF job input exceeds bound");
   let parsed: unknown;
   try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
@@ -83,7 +89,8 @@ async function render(input: string, output: string, fontPath: string) {
   if (hash(Buffer.from(raw.content, "utf8")) !== raw.contentHash) throw new Error("PDF source hash mismatch");
   const doc = await PDFDocument.create(); doc.setTitle(`Sage ${raw.artifactRevisionId}`); doc.setAuthor(raw.origin); doc.setSubject(raw.provenance); doc.setCreator("Sage local pdf-lib/1.17.1"); doc.setKeywords(["artifact_only", raw.artifactRevisionId, raw.contentHash]);
   let body: PDFFont; let mono: PDFFont;
-  if (raw.font) { const fontBytes = await readFile(fontPath); if (fontBytes.length > 8388608) throw new Error("PDF font exceeds bound"); doc.registerFontkit(fontkit); body = await doc.embedFont(fontBytes, { subset: true }); mono = body; }
+  const embed = async (p: string) => { const b = await readFile(p); if (b.length > 8388608) throw new Error("PDF font exceeds bound"); return doc.embedFont(b, { subset: true }); };
+  if (raw.fonts !== "none") { doc.registerFontkit(fontkit); body = await embed(fontPath); mono = raw.fonts === "two" ? await embed(monoPath) : body; }
   else { body = await doc.embedFont(StandardFonts.Helvetica); mono = await doc.embedFont(StandardFonts.Courier); }
   const content = blocks(raw.content, raw.mediaType === "text/plain");
   const charset = new Map<PDFFont, Set<number>>([[body, new Set(body.getCharacterSet())], [mono, new Set(mono.getCharacterSet())]]);
@@ -119,6 +126,6 @@ async function render(input: string, output: string, fontPath: string) {
   console.log(JSON.stringify({ pages: checked.getPageCount(), bytes: result.length, fileHash: hash(result), replaced }));
 }
 if (import.meta.main) {
-  try { if (process.argv.length !== 5) throw new Error("Invalid owned PDF worker invocation"); await render(process.argv[2]!, process.argv[3]!, process.argv[4]!); }
+  try { if (process.argv.length !== 6) throw new Error("Invalid owned PDF worker invocation"); await render(process.argv[2]!, process.argv[3]!, process.argv[4]!, process.argv[5]!); }
   catch (error) { console.error(error instanceof Error ? error.message : "PDF renderer failed"); process.exitCode = 1; }
 }
