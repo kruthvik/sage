@@ -114,7 +114,7 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
         hypotheses: [...s.hypotheses.values()].filter(h => n.subskills.some(x => x.id === h.subskillId)).map(h => ({ statement: h.statement, status: h.status })) }), parseSummary);
       const cap = DIGEST_TOKENS * 5; // the engine's digest budget; a long summary is trimmed at a word, not rejected
       const digest = sum.digest.length <= cap ? sum.digest : `${sum.digest.slice(0, cap - 1).replace(/\s+\S*$/, "")}…`;
-      out.push({ actor: "role", event: { type: "digest_written", nodeId: n.id, digest } });
+      out.push({ actor: "role", event: { type: "digest_written", nodeId: n.id, digest, cheatSheet: sum.cheatSheet } });
       break;
     }
     case "researcher": {

@@ -9,7 +9,8 @@ import { Ledger } from "../../../packages/storage/src/ledger.ts";
 import { SessionDriver, type DriverRuntime, type ServerEvent } from "../../../packages/agent/src/driver.ts";
 import { DEFAULT_ROLE_MODELS, GRADER_CALIBRATION, type RoleModels } from "../../../packages/agent/src/host.ts";
 import { buildPacket } from "../../../packages/agent/src/packet.ts";
-import { EngineError } from "../../../packages/engine/src/loop.ts";
+import { EngineError, replay } from "../../../packages/engine/src/loop.ts";
+import { usedMin } from "../../../packages/engine/src/pacing.ts";
 import type { EngineEvent } from "../../../packages/engine/src/state.ts";
 import type { Goal, ResponseInput } from "../../../packages/core/src/types.ts";
 import type { SagePaths } from "../../../packages/pi-adapter/src/sdk.ts";
@@ -32,6 +33,10 @@ export function startServer(opts: ServeOptions) {
   mkdirSync(dirname(opts.paths.db), { recursive: true });
   const ledger = new Ledger(opts.paths.db);
   const settingsFile = join(opts.paths.home, "settings.json");
+  // Local counters only (SPEC: on by default, visible toggle, nothing uploaded).
+  const usageFile = join(opts.paths.home, "data", "usage.json");
+  const usageOn = () => { try { return JSON.parse(readFileSync(usageFile, "utf8")).enabled !== false; } catch { return true; } };
+  const writeJson = (f: string, v: unknown) => { mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, JSON.stringify(v, null, 2)); };
   const readModels = (): RoleModels => { try { return { ...DEFAULT_ROLE_MODELS, ...JSON.parse(readFileSync(settingsFile, "utf8")).roleModels }; } catch { return { ...DEFAULT_ROLE_MODELS }; } };
   const drivers = new Map<string, SessionDriver>();
   const leases = new Map<string, string>(); // sessionId → conn id
@@ -42,7 +47,7 @@ export function startServer(opts: ServeOptions) {
     let d = drivers.get(id);
     if (!d) {
       if (!ledger.sessions().includes(id)) throw new RpcError(ERR.unknownSession, `unknown session ${id}`);
-      d = SessionDriver.resume(id, ledger, opts.rt, readModels(), broadcast, opts.now); drivers.set(id, d);
+      d = SessionDriver.resume(id, ledger, opts.rt, readModels(), broadcast, opts.now); d.exportsHome = opts.paths.home; drivers.set(id, d);
     }
     return d;
   };
@@ -66,7 +71,7 @@ export function startServer(opts: ServeOptions) {
       case "session.create": {
         const sessionId = randomUUID();
         const d = SessionDriver.create(defaultsFor(p.goal as Partial<Goal>), sessionId, ledger, opts.rt, readModels(), broadcast, opts.now);
-        drivers.set(sessionId, d); lease(c, sessionId);
+        d.exportsHome = opts.paths.home; drivers.set(sessionId, d); lease(c, sessionId);
         void d.drain(); // planning runs while the client subscribes; events arrive as notifications
         return { sessionId };
       }
@@ -103,6 +108,7 @@ export function startServer(opts: ServeOptions) {
       case "research.status": return { packs: driver(id!).view().packs, searchAvailable: true };
       case "research.pack": { const pk = driver(id!).state.packs.get(p.packId as string); if (!pk) throw new RpcError(ERR.params, "unknown pack"); return pk; }
       case "sources.acceptPack": return act({ type: "research_pack_accepted", packId: p.packId as string, ...(p.itemIds ? { itemIds: p.itemIds as string[] } : {}) });
+      case "export.get": { const r = await driver(id!).exportNow("session"); return { ...r, sessionMd: readFileSync(join(r.dir, "session.md"), "utf8") }; }
       case "settings.get": return { roleModels: readModels(), graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
       case "settings.set": {
         const rm = p.roleModels as Record<string, { provider?: unknown; model?: unknown }> | undefined;
@@ -112,7 +118,15 @@ export function startServer(opts: ServeOptions) {
         for (const d of drivers.values()) d.models = next;
         return { roleModels: next };
       }
-      case "usage.get": return id ? driver(id).state.spend : { calls: ledger.calls().filter(x => x.phase === "completed").length };
+      case "usage.get": {
+        if (id) return driver(id).state.spend;
+        if (!usageOn()) return { enabled: false };
+        // shortcut: replays every session per call; fine for a personal ledger, cache per session if it grows past ~100 sessions.
+        let minutes = 0;
+        for (const s of ledger.sessions()) { try { minutes += usedMin(drivers.get(s)?.state ?? replay(ledger.engineLog(s))); } catch { /* ledger from an older engine */ } }
+        return { enabled: true, sessions: ledger.sessions().length, hours: Math.round(minutes / 6) / 10, calls: ledger.calls().filter(x => x.phase === "completed").length };
+      }
+      case "usage.set": { writeJson(usageFile, { enabled: p.enabled }); return { enabled: p.enabled }; }
     }
     throw new RpcError(ERR.method, `unhandled method ${method}`);
   }

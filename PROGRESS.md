@@ -18,7 +18,7 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 | M1 Pure engine + ledger | **done** | `bun test`: 36 pass · `tsc` clean · `bun run eval` all 6 personas, 0 reducer errors |
 | M2 Agent layer ◆ | **done**; owner chose role defaults (sol: planner/tutor/grader; flash: generator/feynman/summarizer/researcher) | `bun test` 63 pass · grader A1–A10 PASS on sol · commits `4c1339e`…`a25f576` |
 | M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
-| M4 Exports | not started | |
+| M4 Exports | **done** (PDF maths font question open; see M4 below) | `bun test` 94 pass · `tsc` clean |
 | M5 Activities ◆ | not started | |
 | M6 Integrations | not started | |
 
@@ -114,6 +114,17 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - **Researcher** returns its pack through a `submit_pack` tool call with a JSON schema (pi validates the arguments), not prose JSON. Untested live yet.
 - **Flash as grader:** fails the A1–A10 gate at default reasoning (MAE 8.8) and at medium (MAE 8.7, signed −0.5). The misses are the same two anchors both times: A7 (target 55, flash 25) and A8 (target 65, flash 88). sol passes (MAE 5.5). High reasoning was started but stopped unfinished.
 
+### M4: what exists (2026-11-08)
+- `packages/exports`: deterministic Markdown from engine state + ledger events, with no model calls. The session folder is `SAGE_HOME/sessions/<date>-<slug>/`:
+  - root files `session.md`, `plan.md`, `cheatsheet.md|.pdf` (final);
+  - per node, `nodes/NN-slug/{lesson,items,cheatsheet}.md` plus `cheatsheet.pdf` once the node passes.
+- `session.md` contents: primary metrics, the plan with STM per subskill, Now, the six outcomes as separate rows, stats and the timeline.
+- Cheat sheets have "Key ideas" (summarizer lines, new `digest_written.cheatSheet`) and "Your mistakes" (the learner's quoted flaws and open hypotheses).
+- Never overwrites user edits: `.sage-export.json` stores the hash of what Sage last wrote. Any file whose hash differs is skipped and reported as `userEdited`. Writes are atomic.
+- PDFs use the v3 pdf-lib worker port (isolated subprocess, bounded, never overwrites). The v3 bound tests are ported.
+- API: `export.get` (writes, then returns the result and `session.md`); `usage.set {enabled}` and `usage.get` totals `{sessions, hours, calls}`. These are local counters from the ledger, on by default, and nothing is uploaded. The dev console has an Export button and a Usage counters checkbox.
+- **Finding (pdf-lib vs Typst):** the built-in Helvetica can't show maths symbols. The worker writes the common ones as ASCII (∫ → "integral", ≤ → "<=", π → "pi"). Anything else prints as "?", with a notice on the page; the Markdown keeps the exact text. Real maths typesetting needs Typst or an embedded Unicode font, either one a new dependency (owner ask).
+
 ## Research findings worth knowing
 
 - Nothing in `outputs/` contradicts a spec mechanism.
@@ -150,16 +161,15 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 ## Queued for later batches
 
 - **M2**: pi version (pin 1.5.0, the owner's current, after checking exported APIs vs v3's 1.0.0); which of the owner's pi packages to bundle or recommend (`pi-web-access` for source finding is the obvious reuse; inventory below); ~10 grader calibration anchors; precision/polish deduction points.
-- **M4**: pdf-lib vs Typst (after checking math/table rendering).
 - **M6**: whether the untracked v3 `packages/sources` extractors ship; Ollama install + EmbeddingGemma tag; sqlite-vec on Windows.
 
 Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-browser-native, pi-subagents, rpiv-ask-user-question, pi-antigravity, pi-lens, pi-powerline-footer, pi-web-access, browser-loop, pi-sdd-kit, pi-usage, pi-llama-cpp; local `herdr-agent-state.ts`, `pi-rtk-optimizer`. Providers with auth: openai-codex, github-copilot, antigravity, llama.cpp.
 
 ## Next 3 tasks
 
-1. **Owner:** `bun run sage login` → `/login` openai-codex inside Sage's dir, so terra (and sol) are available. Until then, set planner/tutor to flash in settings for a session.
-2. Calibrate terra and sol on the new grader prompt (`bun packages/eval/calibration/run-grader.ts openai-codex/gpt-6.1-terra 3`) and run a short terra planner/tutor eval (planner deadline at low reasoning).
-3. Owner: review the C01–C20 targets flagged above; then recalibrate ED-29 from the owner's real session.
+1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
+2. **Owner:** M4 PDF maths: keep pdf-lib with ASCII spellings, embed a Unicode TTF you supply, or add Typst (new dependency).
+3. M5 Activities ◆: stop for the owner's questions before building.
 
 ## Commands
 

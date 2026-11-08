@@ -43,7 +43,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `sources.acceptPack` | sessionId, packId, itemIds? | learner (lease) |  |
 | `settings.get` | — | read | returns `roleModels` and `graderCalibration` (`provider/model` → calibration note, e.g. flash: "fails calibration: lenient on weak answers") |
 | `settings.set` | roleModels? | learner (lease) |  |
-| `usage.get` | sessionId? | read |  |
+| `usage.get` | sessionId? | read | With sessionId: that session's spend. Without: `{enabled, sessions, hours, calls}`, or `{enabled:false}` when counters are off. |
 
 ## Reserved in v1 (answer `1003` until their milestone)
 
@@ -52,7 +52,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `turn.send` | sessionId, text | learner (lease) | free-text turn to the tutor (needs an engine event) |
 | `image.consent` | sessionId | learner (lease) | M5 |
 | `transcription.confirm` | sessionId | learner (lease) | M5 |
-| `export.get` | sessionId | read | M4 |
+| `export.get` | sessionId | read | regenerates the session folder (`SAGE_HOME/sessions/<date>-<topic>/`) from the ledger; returns `{dir, written, unchanged, userEdited, pdfs, errors, sessionMd}`. Files the learner edited are never overwritten (listed in `userEdited`). |
 | `sources.add` | — | learner (lease) | M6 |
 | `sources.preview` | — | read | M6 |
 | `sources.accept` | — | learner (lease) | M6 |
@@ -60,7 +60,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `sources.list` | — | read | M6 |
 | `brain.get` | — | read | Phase 2 |
 | `brain.set` | — | learner (lease) | Phase 2 |
-| `usage.set` | — | learner (lease) | M4 |
+| `usage.set` | enabled: boolean | learner | Local usage counters on/off (on by default; nothing is uploaded). |
 | `extensions.list` | — | read | M6 |
 | `extensions.install` | — | learner (lease) | M6 |
 | `extensions.enable` | — | learner (lease) | M6 |

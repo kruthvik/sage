@@ -53,7 +53,7 @@ export type EngineEvent =
   | { type: "pace_set"; pace: "normal" | "speed_up" }
   | { type: "time_extended"; minutes: number }
   | { type: "reviews_consented"; subskillIds: string[] }
-  | { type: "digest_written"; nodeId: string; digest: string }
+  | { type: "digest_written"; nodeId: string; digest: string; cheatSheet?: string[] }
   | { type: "role_call_logged"; role: string; inputTokens: number; outputTokens: number; costUsd?: number }
   | { type: "research_requested"; question: string }
   | { type: "research_pack_received"; pack: Omit<SourcePack, "status" | "acceptedItemIds">; items?: SourcePackItem[] }

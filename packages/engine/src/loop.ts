@@ -228,6 +228,7 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       const n = s.plan?.nodes.find(x => x.id === ev.nodeId) ?? fail("unknown node");
       if (ev.digest.length > DIGEST_TOKENS * 5) fail("digest over budget");
       n.digest = ev.digest;
+      if (ev.cheatSheet) n.cheatSheet = ev.cheatSheet.map(String).slice(0, 8);
       return;
     }
     case "role_call_logged": {

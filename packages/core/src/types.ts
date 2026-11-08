@@ -40,6 +40,8 @@ export interface PlanNode {
   id: string; title: string; order: number; prerequisites: string[]; subskills: SubSkill[];
   examWeight: "high" | "medium" | "low"; misconceptionsToProbe: string[]; estMinutes: number; status: NodeStatus;
   digest?: string; micro?: boolean; passedAtMin?: number;
+  /** Summarizer's review lines at node close (≤8); rendered into the node cheat sheet with the learner's quoted mistakes. */
+  cheatSheet?: string[];
   /** Planner's confidence in its own knowledge of this node; `low` triggers research (niche, recent, course-specific, local rules). */
   knowledgeConfidence?: "low" | "medium" | "high";
   /** Accepted sources covering this node. Empty while the learner has sources ⇒ uncovered ⇒ research. */

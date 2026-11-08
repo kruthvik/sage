@@ -12,7 +12,7 @@ textarea,input,select{width:100%;box-sizing:border-box;font:inherit;padding:8px;
 button{font:inherit;padding:6px 10px;margin:4px 4px 0 0;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit;cursor:pointer}
 button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 #log{height:420px;overflow:auto;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap}
-.ev{border-bottom:1px solid var(--line);padding:4px 0}.err{color:var(--err)}
+.ev{border-bottom:1px solid var(--line);padding:4px 0;white-space:pre-wrap}.err{color:var(--err)}
 #stage>div{margin-bottom:12px}.choice{display:block;width:100%;text-align:left}
 </style></head><body><main>
 <div>
@@ -25,7 +25,7 @@ button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 <section><h2>Session</h2><div id="stage"><div class="mute">No session yet.</div></div>
 <div id="answer" hidden><textarea id="resp" rows="4" placeholder="Your answer"></textarea>
 <button class="primary" onclick="submit()">Submit</button><button onclick="call('hint.request',{level:1})">Hint 1</button><button onclick="call('hint.request',{level:2})">Hint 2</button><button onclick="call('hint.request',{level:3})">Hint 3</button><button onclick="call('chunk.peek')">Peek chunk</button></div>
-<div><button onclick="call('plan.approve')">Approve plan</button><button onclick="ack()">OK, next</button><button onclick="call('control.advance')">Advance</button><button onclick="call('control.morePractice')">More practice</button><button onclick="call('control.teach')">Teach me</button><button onclick="call('pace.set',{pace:'speed_up'})">Speed up</button><button onclick="call('control.stop')">Stop</button><button onclick="accept()">Accept research</button><button onclick="state()">State</button><button onclick="dispute()">Dispute grade</button></div>
+<div><button onclick="call('plan.approve')">Approve plan</button><button onclick="ack()">OK, next</button><button onclick="call('control.advance')">Advance</button><button onclick="call('control.morePractice')">More practice</button><button onclick="call('control.teach')">Teach me</button><button onclick="call('pace.set',{pace:'speed_up'})">Speed up</button><button onclick="call('control.stop')">Stop</button><button onclick="accept()">Accept research</button><button onclick="state()">State</button><button onclick="exp()">Export</button><label><input type="checkbox" id="usage" checked onchange="rpc('usage.set',{enabled:this.checked}).then(v=>log('usage counters '+(v.enabled?'on':'off')+' (local only, nothing uploaded)'))"> Usage counters</label><button onclick="dispute()">Dispute grade</button></div>
 </section>
 </div>
 <section><h2>Events</h2><div id="log" aria-live="polite"></div></section>
@@ -54,6 +54,8 @@ const submit=()=>{call('item.submit',{text:$('resp').value});$('resp').value='';
 const choose=i=>{call('item.submit',{choice:i});$('answer').hidden=true};
 const ack=()=>feedback&&call('feedback.ack',{attemptId:feedback}).then(()=>feedback=null);
 const state=()=>call('state.get');
+const exp=()=>call('export.get').then(v=>v&&log('Exported to '+v.dir+(v.userEdited.length?' (kept your edits: '+v.userEdited.join(', ')+')':'')+'\\n\\n'+v.sessionMd.slice(0,6000)));
+ws.addEventListener('open',()=>rpc('usage.get',{}).then(v=>{$('usage').checked=v.enabled!==false}).catch(()=>{}));
 const extend=()=>call('time.extend',{minutes:fit.estMin-fit.budgetMin}),speed=()=>call('pace.set',{pace:'speed_up'});
 async function merge(){for(const g of fit.mergeGroups)await call('plan.merge',{nodeIds:g})}
 function dispute(){if(!lastAttempt)return log('nothing to dispute','err');const a=prompt('Why is the grade or answer key wrong?');if(a)call('grade.dispute',{attemptId:lastAttempt,argument:a})}

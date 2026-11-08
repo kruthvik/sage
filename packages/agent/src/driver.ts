@@ -6,6 +6,7 @@ import { EVENT_ACTOR, initialState } from "../../engine/src/state.ts";
 import { reduce, EngineError, sessionState, type Actor } from "../../engine/src/loop.ts";
 import { planFit } from "../../engine/src/pacing.ts";
 import type { Ledger } from "../../storage/src/ledger.ts";
+import { writeExports, type ExportResult, type ExportWhat } from "../../exports/src/writer.ts";
 import type { Goal } from "../../core/src/types.ts";
 import type { RoleCallInput, RoleCallResult, TutorTurnResult, TutorTool } from "../../pi-adapter/src/runtime.ts";
 import { runRole, type RoleModels } from "./host.ts";
@@ -26,6 +27,8 @@ export class SessionDriver {
   private seq = 0;
   private background = new Set<Promise<void>>();
   readonly abort = new AbortController();
+  /** SAGE_HOME for session folders (SPEC §14); unset = no files written (tests, evals). */
+  exportsHome?: string;
 
   constructor(readonly sessionId: string, private ledger: Ledger, private rt: DriverRuntime, public models: RoleModels,
     private emit: (e: ServerEvent) => void, private now: () => string = () => new Date().toISOString()) {}
@@ -98,6 +101,11 @@ export class SessionDriver {
     return true;
   }
 
+  /** Regenerate the session folder from the ledger now (export.get, node close, session end). Never overwrites files the learner edited. */
+  async exportNow(what: ExportWhat = "session"): Promise<ExportResult> {
+    if (!this.exportsHome) throw new Error("no SAGE_HOME set for exports");
+    return writeExports(this.exportsHome, this.state, this.ledger.engineLog(this.sessionId), what, { models: this.models });
+  }
   private out(event: string, data: unknown) { this.emit({ event, sessionId: this.sessionId, data }); }
 
   private async handle(fx: Effect): Promise<void> {
@@ -145,7 +153,12 @@ export class SessionDriver {
       case "pace_notice": return this.out("pace.notice", fx);
       case "confirm_required": return this.out("confirm.required", fx);
       case "notice": return this.out(fx.code === "research_ready" ? "research.ready" : fx.code === "plan_ready" ? "plan.changed" : "notice", fx);
-      case "write_export": return this.out("export.ready", { what: fx.what, available: false, note: "exports arrive in M4" });
+      case "write_export": {
+        if (!this.exportsHome) return this.out("export.ready", { what: fx.what, available: false, note: "no SAGE_HOME set for exports" });
+        try { const r = await this.exportNow(fx.what); this.out("export.ready", { what: fx.what, available: true, ...r }); }
+        catch (e) { this.out("error", { code: "export_failed", message: (e as Error).message }); }
+        return;
+      }
       case "checkpoint": return this.out("checkpoint", {});
       case "item_rejected": return this.out("dev.item_rejected", fx);
       case "plan_fit": return this.out("plan.fit", fx.fit);

@@ -29,7 +29,7 @@ test("bad token, foreign origin and non-loopback host are refused", async () => 
 test("params are validated, reserved methods answer not_implemented, unknown methods are refused", async () => {
   const c = client(); await c.open;
   expect((await c.rpc("session.create", { goal: { objective: 5 } })).error?.code).toBe(ERR.params);
-  expect((await c.rpc("export.get", { sessionId: "x" })).error?.code).toBe(ERR.notImplemented);
+  expect((await c.rpc("extensions.list", {})).error?.code).toBe(ERR.notImplemented);
   expect((await c.rpc("grade.receive", {})).error?.code).toBe(ERR.method);
   c.ws.close();
 });
@@ -53,4 +53,15 @@ test("create → plan → approve → first item over the wire; a second client 
 test("the dev console's inline script parses", async () => {
   const { CONSOLE_HTML } = await import("../src/console.ts");
   expect(() => new Function(CONSOLE_HTML.split("<script>")[1]!.split("</script>")[0]!)).not.toThrow();
+});
+
+test("usage counters are local, on by default, and can be switched off", async () => {
+  const c = client(); await c.open;
+  const on = (await c.rpc("usage.get")).result;
+  expect(on.enabled).toBe(true); expect(typeof on.sessions).toBe("number"); expect(typeof on.hours).toBe("number");
+  expect((await c.rpc("usage.set", { enabled: false })).result).toEqual({ enabled: false });
+  expect((await c.rpc("usage.get")).result).toEqual({ enabled: false });
+  expect((await c.rpc("usage.set", { enabled: "no" })).error?.code).toBe(ERR.params);
+  await c.rpc("usage.set", { enabled: true });
+  c.ws.close();
 });
