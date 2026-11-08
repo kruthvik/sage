@@ -45,7 +45,7 @@ export const METHODS: Record<string, MethodSpec> = {
   "research.pack": { params: obj({ ...sid, packId: str }, ["sessionId", "packId"]) },
   "sources.acceptPack": { params: obj({ ...sid, packId: str, itemIds: { type: "array", items: str } }, ["sessionId", "packId"]), learner: true },
   "settings.get": { params: obj({}) },
-  "settings.set": { params: obj({ roleModels: { type: "object" } }), learner: true },
+  "settings.set": { params: obj({ roleModels: { type: "object" }, exportFontPath: { type: ["string", "null"] } }), learner: true },
   "usage.get": { params: obj({ sessionId: str }) },
   // Reserved in v1, implemented in later milestones.
   "turn.send": { params: obj({ ...sid, text: str }, ["sessionId", "text"]), learner: true, impl: false, note: "free-text turn to the tutor (needs an engine event)" },

@@ -134,6 +134,13 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 
 (Answers to question batches go here, newest first. They override SPEC.md.)
 
+- **M5 batch (2026-11-08):**
+  - Library activities for Phase 1 are ordering, matching and contrasting cases. Plot/param sims and labeling/concept maps are deferred.
+  - scrap_work photos are read by **flash**, with consent per message, and the learner confirms the transcription before scoring.
+  - The `---js` module is **skipped** for Phase 1.
+  - PDF maths uses an **owner-supplied TTF** (settings `exportFontPath`).
+  - Deviation (flag if wrong): the three new activities are structured items, so they render natively in the client (registry `renders: native`) rather than through a DSL port. The DSL is only needed for model-authored visuals, which are deferred.
+
 - **Owner reply 2 (2026-11-07). Overrides SPEC where they conflict.**
   - **Grading rules:** criteria first (met / partly met / not met; partial credit for partly met). Deductions apply only to a *met* criterion worded imprecisely: **precision −7 typical (5–10; 10 for standard examiner deductions such as a missing +C, a wrong technical term, a vague location)**, **polish −1 (0–2), polish total capped at 4**. If the stem gives the answer away, repeating it earns nothing. Calibration adds: **mean signed error ≤ +3** (grader can't be lenient on average), on top of MAE ≤ 8 and no target ≤85 scoring ≥95.
   - **Anchors A1–A10 are final** (owner scores; mine were 10–25 too lenient on A2/A5/A7/A8/A9). The other ≥20 triples must span **≥6 domains**, including non-academic ones (language, programming, argument, music/chess principle, econ/stats, a procedural task). Each domain needs a right-answer-wrong-reason case and a precision-only case.

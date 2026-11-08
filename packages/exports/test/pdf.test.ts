@@ -55,3 +55,12 @@ test("built-in font transliterates maths symbols and counts the rest as replaced
   expect(r.replacedChars).toBe(1); // 漢 only; ∫ → ≤ ∞ have spellings, ² is in WinAnsi
   expect((await readFile(f.options.outputPath)).subarray(0, 5).toString()).toBe("%PDF-");
 }, 15000);
+
+test("an explicit local TTF keeps maths glyphs; glyphs it lacks fall back instead of failing", async () => {
+  const system = "C:/Windows/Fonts/arial.ttf"; // local test only; Sage never picks a system font itself
+  if (!(await access(system).then(() => true, () => false))) return;
+  const f = await fixture(), font = join(f.root, "arial.ttf");
+  await writeFile(font, await readFile(system)); // system fonts are hard-linked; the bounded reader refuses those
+  const r = await exportMarkdownPdf({ ...f.options, fontPath: font, content: "∫ x dx ≤ π and 漢" });
+  expect(r.replacedChars).toBe(1);
+}, 15000);

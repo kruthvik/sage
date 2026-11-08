@@ -8,7 +8,7 @@ import { passed } from "../../engine/src/items.ts";
 import { RETENTION_MIN_DELAY_MS } from "../../engine/src/pedagogy.config.ts";
 
 export interface LogEntry { event: EngineEvent; now: string }
-export interface ExportMeta { models?: Record<string, { provider: string; model: string }> }
+export interface ExportMeta { models?: Record<string, { provider: string; model: string }>; fontPath?: string }
 
 /** Learner and model text is data: keep it on one line and out of table syntax. */
 const cell = (t: unknown) => String(t ?? "").replace(/\s+/g, " ").replace(/\|/g, "\\|").trim();

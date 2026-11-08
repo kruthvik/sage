@@ -2,7 +2,7 @@
 // Security: binds 127.0.0.1 only; Host and Origin must be loopback on this port (blocks DNS rebinding and cross-site pages);
 // the launch token is compared in constant time. Only learner-owned engine events can come from a client (F10, via the driver).
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Ledger } from "../../../packages/storage/src/ledger.ts";
@@ -37,7 +37,9 @@ export function startServer(opts: ServeOptions) {
   const usageFile = join(opts.paths.home, "data", "usage.json");
   const usageOn = () => { try { return JSON.parse(readFileSync(usageFile, "utf8")).enabled !== false; } catch { return true; } };
   const writeJson = (f: string, v: unknown) => { mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, JSON.stringify(v, null, 2)); };
-  const readModels = (): RoleModels => { try { return { ...DEFAULT_ROLE_MODELS, ...JSON.parse(readFileSync(settingsFile, "utf8")).roleModels }; } catch { return { ...DEFAULT_ROLE_MODELS }; } };
+  const readSettings = (): { roleModels?: Partial<RoleModels>; exportFontPath?: string } => { try { return JSON.parse(readFileSync(settingsFile, "utf8")); } catch { return {}; } };
+  const readModels = (): RoleModels => ({ ...DEFAULT_ROLE_MODELS, ...readSettings().roleModels });
+  const wire = (d: SessionDriver) => { d.exportsHome = opts.paths.home; d.exportFontPath = readSettings().exportFontPath; return d; };
   const drivers = new Map<string, SessionDriver>();
   const leases = new Map<string, string>(); // sessionId → conn id
   const sockets = new Map<string, ServerWebSocket<Conn>>();
@@ -47,7 +49,7 @@ export function startServer(opts: ServeOptions) {
     let d = drivers.get(id);
     if (!d) {
       if (!ledger.sessions().includes(id)) throw new RpcError(ERR.unknownSession, `unknown session ${id}`);
-      d = SessionDriver.resume(id, ledger, opts.rt, readModels(), broadcast, opts.now); d.exportsHome = opts.paths.home; drivers.set(id, d);
+      d = wire(SessionDriver.resume(id, ledger, opts.rt, readModels(), broadcast, opts.now)); drivers.set(id, d);
     }
     return d;
   };
@@ -71,7 +73,7 @@ export function startServer(opts: ServeOptions) {
       case "session.create": {
         const sessionId = randomUUID();
         const d = SessionDriver.create(defaultsFor(p.goal as Partial<Goal>), sessionId, ledger, opts.rt, readModels(), broadcast, opts.now);
-        d.exportsHome = opts.paths.home; drivers.set(sessionId, d); lease(c, sessionId);
+        wire(d); drivers.set(sessionId, d); lease(c, sessionId);
         void d.drain(); // planning runs while the client subscribes; events arrive as notifications
         return { sessionId };
       }
@@ -109,14 +111,17 @@ export function startServer(opts: ServeOptions) {
       case "research.pack": { const pk = driver(id!).state.packs.get(p.packId as string); if (!pk) throw new RpcError(ERR.params, "unknown pack"); return pk; }
       case "sources.acceptPack": return act({ type: "research_pack_accepted", packId: p.packId as string, ...(p.itemIds ? { itemIds: p.itemIds as string[] } : {}) });
       case "export.get": { const r = await driver(id!).exportNow("session"); return { ...r, sessionMd: readFileSync(join(r.dir, "session.md"), "utf8") }; }
-      case "settings.get": return { roleModels: readModels(), graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
+      case "settings.get": return { roleModels: readModels(), exportFontPath: readSettings().exportFontPath ?? null, graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
       case "settings.set": {
         const rm = p.roleModels as Record<string, { provider?: unknown; model?: unknown }> | undefined;
         for (const [role, m] of Object.entries(rm ?? {})) if (!(role in DEFAULT_ROLE_MODELS) || typeof m?.provider !== "string" || typeof m?.model !== "string") throw new RpcError(ERR.params, `roleModels.${role} needs a known role with provider and model`);
+        const fp = p.exportFontPath;
+        if (fp !== undefined && fp !== null && !(typeof fp === "string" && /\.(ttf|otf)$/i.test(fp) && existsSync(fp))) throw new RpcError(ERR.params, "exportFontPath must be an existing local .ttf/.otf file (or null to use the built-in font)");
         const next = { ...readModels(), ...rm } as RoleModels;
-        writeFileSync(settingsFile, JSON.stringify({ roleModels: next }, null, 2));
-        for (const d of drivers.values()) d.models = next;
-        return { roleModels: next };
+        const cur = readSettings(), exportFontPath = fp === undefined ? cur.exportFontPath : fp ?? undefined;
+        writeJson(settingsFile, { ...cur, roleModels: next, exportFontPath });
+        for (const d of drivers.values()) { d.models = next; d.exportFontPath = exportFontPath; }
+        return { roleModels: next, exportFontPath: exportFontPath ?? null };
       }
       case "usage.get": {
         if (id) return driver(id).state.spend;

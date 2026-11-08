@@ -42,7 +42,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `research.pack` | sessionId, packId | read |  |
 | `sources.acceptPack` | sessionId, packId, itemIds? | learner (lease) |  |
 | `settings.get` | — | read | returns `roleModels` and `graderCalibration` (`provider/model` → calibration note, e.g. flash: "fails calibration: lenient on weak answers") |
-| `settings.set` | roleModels? | learner (lease) |  |
+| `settings.set` | roleModels?, exportFontPath? (string | null) | learner (lease) | `exportFontPath`: a local .ttf/.otf you have embedding rights for, used in PDF exports. Copy it into a plain folder such as `SAGE_HOME/fonts/`: system fonts (`C:Windowsonts`) are hard-linked and refused. null = built-in font (maths symbols printed as ascii). |
 | `usage.get` | sessionId? | read | With sessionId: that session's spend. Without: `{enabled, sessions, hours, calls}`, or `{enabled:false}` when counters are off. |
 
 ## Reserved in v1 (answer `1003` until their milestone)

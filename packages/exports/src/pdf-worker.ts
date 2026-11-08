@@ -1,6 +1,6 @@
 // Ported from v3 runtime/src/markdown-pdf-worker.ts (V3_PORT: keep). Runs in an isolated subprocess; never renders HTML,
-// loads URLs/images or adds PDF actions. Changes from v3: plain validation instead of typebox; with the built-in font,
-// common maths symbols are transliterated and other unsupported characters become "?" with a notice (v3 refused the file).
+// loads URLs/images or adds PDF actions. Changes from v3: plain validation instead of typebox;
+// characters the font lacks (built-in or owner-supplied) are transliterated where common, else "?" with a notice (v3 refused the file).
 import { readFile, writeFile } from "node:fs/promises";
 import { PDFDocument, StandardFonts, PDFName, rgb, type PDFFont } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -90,13 +90,12 @@ async function render(input: string, output: string, fontPath: string) {
   let replaced = 0;
   const fit = (value: string, font: PDFFont) => Array.from(value).map(ch => {
     if (ch === "\n" || charset.get(font)!.has(ch.codePointAt(0)!)) return ch;
-    if (raw.font) throw new Error(`PDF font cannot represent U+${ch.codePointAt(0)!.toString(16)}; select a local font containing every required glyph`);
     const t = TRANSLIT[ch]; if (t !== undefined && Array.from(t).every(c => charset.get(font)!.has(c.codePointAt(0)!))) return t;
     replaced++; return "?";
   }).join("");
   const fitted = content.map(b => ({ ...b, text: fit(b.text.replace(/\r\n?/g, "\n").replace(/\t/g, "    "), b.mono ? mono : body) }));
   const all: Block[] = [{ text: `Sage export: ${raw.artifactRevisionId}`, size: 8 },
-    ...(replaced ? [{ text: `${replaced} character(s) this built-in font can't show are printed as "?". The Markdown file has the exact text.`, size: 8 }] : []), ...fitted];
+    ...(replaced ? [{ text: `${replaced} character(s) this font can't show are printed as "?". The Markdown file has the exact text.`, size: 8 }] : []), ...fitted];
   const width = 595.28, height = 841.89, margin = 48, available = width - margin * 2;
   let page = doc.addPage([width, height]), y = height - margin;
   function newPage() { if (doc.getPageCount() >= raw.maxPages) throw new Error("PDF page bound exceeded"); page = doc.addPage([width, height]); y = height - margin; }

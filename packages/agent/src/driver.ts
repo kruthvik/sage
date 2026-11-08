@@ -29,6 +29,8 @@ export class SessionDriver {
   readonly abort = new AbortController();
   /** SAGE_HOME for session folders (SPEC §14); unset = no files written (tests, evals). */
   exportsHome?: string;
+  /** Owner-supplied TTF/OTF for PDF exports (settings.exportFontPath); built-in Helvetica when unset. */
+  exportFontPath?: string;
 
   constructor(readonly sessionId: string, private ledger: Ledger, private rt: DriverRuntime, public models: RoleModels,
     private emit: (e: ServerEvent) => void, private now: () => string = () => new Date().toISOString()) {}
@@ -104,7 +106,7 @@ export class SessionDriver {
   /** Regenerate the session folder from the ledger now (export.get, node close, session end). Never overwrites files the learner edited. */
   async exportNow(what: ExportWhat = "session"): Promise<ExportResult> {
     if (!this.exportsHome) throw new Error("no SAGE_HOME set for exports");
-    return writeExports(this.exportsHome, this.state, this.ledger.engineLog(this.sessionId), what, { models: this.models });
+    return writeExports(this.exportsHome, this.state, this.ledger.engineLog(this.sessionId), what, { models: this.models, fontPath: this.exportFontPath });
   }
   private out(event: string, data: unknown) { this.emit({ event, sessionId: this.sessionId, data }); }
 

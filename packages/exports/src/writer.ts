@@ -44,9 +44,9 @@ export async function writeExports(home: string, s: EngineState, log: LogEntry[]
     if (!ours(rel)) { res.userEdited.push(rel); return; }
     if (existsSync(p)) rmSync(p); // ours: replace the previous Sage-written PDF
     try {
-      const r = await exportMarkdownPdf({ content, outputPath: p, artifactRevisionId: id, origin: "tutor", provenance: `Sage session ${s.sessionId}; regenerated from the session ledger` });
+      const r = await exportMarkdownPdf({ content, outputPath: p, artifactRevisionId: id, origin: "tutor", ...(meta.fontPath ? { fontPath: meta.fontPath } : {}), provenance: `Sage session ${s.sessionId}; regenerated from the session ledger` });
       man.files[rel] = r.fileHash; res.pdfs.push(rel);
-      if (r.replacedChars) res.errors.push(`${rel}: ${r.replacedChars} character(s) shown as "?" (built-in PDF font)`);
+      if (r.replacedChars) res.errors.push(`${rel}: ${r.replacedChars} character(s) shown as "?" (the PDF font lacks them)`);
     } catch (e) { delete man.files[rel]; res.errors.push(`${rel}: ${(e as Error).message}`); }
   };
 
