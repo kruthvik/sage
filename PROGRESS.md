@@ -81,6 +81,14 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - Fixes from this run (committed, with regression tests): flash grade quotes (looser quote match, validation inside the grader parse, retry that says what was rejected); rejected role output now retries then parks instead of hanging; the checkpoint move no longer dead-ends; tutor fallback and baseline tutor try every unused item; long digests trimmed; LaTeX backslashes in JSON replies repaired.
 - Still open: flash grader sometimes returns no parseable JSON even after the retry (3× in the calc rerun), occasional tutor_failed, network errors (ENOTFOUND daily-cloudcode-pa.googleapis.com); ww1 (long-form history) passes nothing in 192 min. Researcher `submit_pack` and the key-check drop rate were not measured separately in this run.
 
+### Flash grading (owner, 2026-11-08: "work on flash grading; keep sol; move to terra")
+- **Output:** the grader now answers through a forced `submit_grade` tool call with a JSON schema (`roleCall({ output })`, toolChoice `required`; antigravity maps it to Gemini function-calling mode ANY, codex passes `tool_choice: "required"`). 0 parse failures in 240 flash calls at default reasoning, 1 (recovered by the retry) at high reasoning; free-form JSON broke braces/quotes in ~2 of 60.
+- **Prompt:** a per-criterion decision order (absent/wrong → 0; right but loose → 1 + precision deduction; broader than required → 0.5) and conclusions must answer the exact question asked. Examples in the prompt are neutral (none taken from the anchors).
+- **Calibration, flash default reasoning, 3 repeats:** A1–A10 MAE 7.3, signed +1.9, no ceiling violations → **PASS** (narrowly; earlier runs of the same setup ranged 7.0–8.8). C01–C20 MAE 11.7, signed −2.3. Residual misses are stable, not noise: A7 33 vs 55 (flash won't read "makes most of the energy as NADH" as saying Krebs makes little ATP) and A8 88 vs 65 (flash credits the shifted conclusion).
+- **Tried and dropped:** high reasoning (no change; thinking hits the 4,096-token cap), a second-examiner review pass (A 6.8 but signed +3.4, double the calls), the owner anchors as few-shot examples (leave-one-out A 9.1 with A8 at 98).
+- **C set for owner review:** C15's target 40 credits the classic misreading ("95% sure the true value is in the interval"), where flash gives 0; C04's stem is wrong (the function returns 1 for [1, 2, 3], not 0); C01/C14/C17/C07 targets sit below what the scoring formula can give a right-answer-wrong-reason response.
+- **Defaults:** grader → flash; planner + tutor → `openai-codex/gpt-6.1-terra` (same API as sol, half the price). sol stays selectable per role in settings. sol's 5.5 was measured on the older prompt; neither sol nor terra has been run on the new one (needs `/login` for openai-codex in Sage's dir).
+
 ### M3 eval status before the review changes (superseded)
 - Run 3 hit "Codex error: The usage limit has been reached" 6× (the owner's openai-codex quota, which serves sol), plus the researcher's JSON failure every session. Numbers are contaminated; no unit passed a node within its 30-min budget. calc/adaptive passed its first node at 32 min (first real pass, after fixes 1–3).
 - Across runs, adaptive vs baseline: adaptive learners scored higher (mean 62–94 vs 34–75) and far more of their answers counted as independent (~75–95% vs ~15–35%). Adaptive cost $0.20–0.78 per session-hour; baseline $0.02–0.25.
@@ -137,9 +145,9 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. **Owner:** real Cram session: `bun run sage serve`. Defaults use sol for planner/tutor/grader; with the sol quota out, set those roles to flash in settings.
-2. **Owner decision:** grader on flash fails the calibration gate (A7/A8) and still occasionally returns non-JSON. Keep sol as grader, or work on flash grading, before M4.
-3. Flash grader non-JSON: log the raw failing replies in the next eval to find the cause (LaTeX escapes are already repaired); then recalibrate ED-29 from the owner's session.
+1. **Owner:** `bun run sage login` → `/login` openai-codex inside Sage's dir, so terra (and sol) are available. Until then, set planner/tutor to flash in settings for a session.
+2. Calibrate terra and sol on the new grader prompt (`bun packages/eval/calibration/run-grader.ts openai-codex/gpt-6.1-terra 3`) and run a short terra planner/tutor eval (planner deadline at low reasoning).
+3. Owner: review the C01–C20 targets flagged above; then recalibrate ED-29 from the owner's real session.
 
 ## Commands
 
