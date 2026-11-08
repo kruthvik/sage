@@ -31,7 +31,7 @@ export const METHODS: Record<string, MethodSpec> = {
   "control.leaveWithGaps": { params: obj({ ...sid, confirmToken: str }, ["sessionId"]), learner: true },
   "control.stop": { params: obj(sid, ["sessionId"]), learner: true },
   "control.resume": { params: obj(sid, ["sessionId"]), learner: true },
-  "item.submit": { params: obj({ ...sid, text: { type: "string", maxLength: 8000 }, choice: { type: "integer", minimum: 0 }, fields: { type: "object" }, latencyMs: { type: "number", minimum: 0 } }, ["sessionId"]), learner: true },
+  "item.submit": { params: obj({ ...sid, text: { type: "string", maxLength: 8000 }, choice: { type: "integer", minimum: 0 }, indices: { type: "array", items: { type: "integer", minimum: 0 } }, fields: { type: "object" }, latencyMs: { type: "number", minimum: 0 } }, ["sessionId"]), learner: true },
   "hint.request": { params: obj({ ...sid, level: { enum: [1, 2, 3] } }, ["sessionId", "level"]), learner: true },
   "chunk.peek": { params: obj(sid, ["sessionId"]), learner: true },
   "feedback.ack": { params: obj({ ...sid, attemptId: str }, ["sessionId", "attemptId"]), learner: true },

@@ -89,8 +89,8 @@ export type Effect =
   | { kind: "item_rejected"; itemId: string; problems: string[] }
   | { kind: "plan_fit"; fit: PlanFit };
 
-export type PublicItem = Pick<Item, "id" | "nodeId" | "activityType" | "stem" | "choices" | "format" | "difficulty">;
-export const publicItem = (i: Item): PublicItem => ({ id: i.id, nodeId: i.nodeId, activityType: i.activityType, stem: i.stem, choices: i.choices, format: i.format, difficulty: i.difficulty });
+export type PublicItem = Pick<Item, "id" | "nodeId" | "activityType" | "stem" | "choices" | "targets" | "cases" | "format" | "difficulty">;
+export const publicItem = (i: Item): PublicItem => ({ id: i.id, nodeId: i.nodeId, activityType: i.activityType, stem: i.stem, choices: i.choices, ...(i.targets ? { targets: i.targets } : {}), ...(i.cases ? { cases: i.cases } : {}), format: i.format, difficulty: i.difficulty });
 
 /** Phase-relevant tool advertising (F9, SPEC §12.3). */
 export const TOOLS_BY_PHASE: Partial<Record<LoopPhase, readonly string[]>> = {

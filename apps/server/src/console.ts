@@ -12,7 +12,7 @@ textarea,input,select{width:100%;box-sizing:border-box;font:inherit;padding:8px;
 button{font:inherit;padding:6px 10px;margin:4px 4px 0 0;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit;cursor:pointer}
 button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 #log{height:420px;overflow:auto;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap}
-.ev{border-bottom:1px solid var(--line);padding:4px 0;white-space:pre-wrap}.err{color:var(--err)}
+.ev{border-bottom:1px solid var(--line);padding:4px 0;white-space:pre-wrap}.slot{display:block;margin:4px 0}.cases{display:flex;gap:8px;flex-wrap:wrap}.cases>div{flex:1 1 220px;border:1px solid var(--line);padding:8px}.err{color:var(--err)}
 #stage>div{margin-bottom:12px}.choice{display:block;width:100%;text-align:left}
 </style></head><body><main>
 <div>
@@ -40,7 +40,13 @@ ws.onmessage=m=>{const x=JSON.parse(m.data);if(x.id&&pending[x.id]){x.error?pend
  if(x.method!=='event')return;const e=x.params,d=e.data;log(e.event+' '+JSON.stringify(d).slice(0,400),e.event==='error'?'err':'');show(e.event,d)};
 function show(ev,d){const st=$('stage');const box=h=>{const div=document.createElement('div');div.innerHTML=h;st.prepend(div)};const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
  if(ev==='tutor.done')box('<b>Tutor</b><p>'+esc(d.text)+'</p>');
- if(ev==='item.present'){$('answer').hidden=false;box('<b>'+esc(d.item.activityType)+'</b>'+(d.cueText?'<p><i>'+esc(d.cueText)+'</i></p>':'')+'<p>'+esc(d.item.stem)+'</p>'+(d.item.choices||[]).map((c,i)=>'<button class="choice" onclick="choose('+i+')">'+esc(c)+'</button>').join(''))}
+ if(ev==='item.present'){const it=d.item,t=it.activityType,slots=t==='ordering'||t==='matching';$('answer').hidden=slots;
+  const opts=a=>'<option value="">choose</option>'+a.map((x,j)=>'<option value="'+j+'">'+esc(x)+'</option>').join('');
+  const body=t==='ordering'?(it.choices||[]).map((_,p)=>'<label class="slot">Step '+(p+1)+' <select class="seq">'+opts(it.choices)+'</select></label>').join('')
+   :t==='matching'?(it.choices||[]).map(c=>'<label class="slot">'+esc(c)+' → <select class="seq">'+opts(it.targets||[])+'</select></label>').join('')
+   :(it.choices||[]).map((c,i)=>'<button class="choice" onclick="choose('+i+')">'+esc(c)+'</button>').join('');
+  const cases=(it.cases||[]).length?'<div class="cases">'+it.cases.map((c,i)=>'<div><b>Case '+'AB'[i]+'</b><p>'+esc(c)+'</p></div>').join('')+'</div>':'';
+  box('<b>'+esc(t)+'</b>'+(d.cueText?'<p><i>'+esc(d.cueText)+'</i></p>':'')+'<p>'+esc(it.stem)+'</p>'+cases+body+(slots?'<p><button class="primary" onclick="seq(this)">Submit</button></p>':''))}
  if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>')}
  if(ev==='repair.required')box('<b>Fix this first</b><ul>'+d.flaws.map(f=>'<li>"'+esc(f.quote)+'": '+esc(f.problem)+'</li>').join('')+'</ul>');
  if(ev==='hint.reveal')box('<b>Hint</b><p>'+esc(d.text)+'</p>');
@@ -52,6 +58,7 @@ async function create(){const r=await rpc('session.create',{goal:{objective:$('o
 async function resume(id){if(!id)return;sid=id;await rpc('session.resume',{sessionId:id,takeLease:true}).then(()=>state()).catch(e=>log(e.message,'err'))}
 const submit=()=>{call('item.submit',{text:$('resp').value});$('resp').value='';$('answer').hidden=true};
 const choose=i=>{call('item.submit',{choice:i});$('answer').hidden=true};
+const seq=b=>{const v=[...b.closest('div').querySelectorAll('select.seq')].map(s=>s.value);if(v.some(x=>x===''))return log('Choose an option in every slot first.','err');b.disabled=true;call('item.submit',{indices:v.map(Number)})};
 const ack=()=>feedback&&call('feedback.ack',{attemptId:feedback}).then(()=>feedback=null);
 const state=()=>call('state.get');
 const exp=()=>call('export.get').then(v=>v&&log('Exported to '+v.dir+(v.userEdited.length?' (kept your edits: '+v.userEdited.join(', ')+')':'')+'\\n\\n'+v.sessionMd.slice(0,6000)));

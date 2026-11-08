@@ -68,7 +68,7 @@ export function parsePlan(text: string): Plan {
 }
 
 // ---------- generator ----------
-const ACTIVITIES: ActivityType[] = ["free_recall", "explain_why", "apply_problem", "conceptual_mcq", "find_the_error", "method_choice", "scrap_work"];
+const ACTIVITIES: ActivityType[] = ["free_recall", "explain_why", "apply_problem", "conceptual_mcq", "find_the_error", "method_choice", "scrap_work", "ordering", "matching", "contrasting_cases"];
 const PARTITIONS: Partition[] = ["teaching", "practice", "assessment"];
 export const GENERATOR_SYSTEM = `You write practice and assessment items for one node of a study plan.
 Rules:
@@ -79,11 +79,15 @@ ${Object.entries(ACTIVITY_EVIDENCE).map(([a, d]) => `  ${a}: ${d.join(", ")}`).j
 - The stem must not contain or give away the answer. Avoid cue words that point at the method.
 - conceptual_mcq: 2-8 distinct choices, key {"kind":"choice","index":<0-based index of the correct choice>}, and distractorRationales with one entry per wrong choice explaining why it is wrong.
 - Numeric answers: key {"kind":"numeric","value":...,"tolerance":...}. Short exact answers: {"kind":"exact","values":[...]}. Open answers: a rubric of 2-4 checkable criteria and key {"kind":"reference","text":"model answer"}.
+- ordering (steps of a procedure, events in sequence): 3-8 distinct choices listed in a shuffled order, key {"kind":"order","order":[choice indices in the correct sequence]}. Never list them already in the right order.
+- matching (terms to definitions, causes to effects): choices = left column (2-8), targets = right column (same count, up to 3 extra distractors), key {"kind":"match","pairs":[target index for each choice]}.
+- contrasting_cases: cases = two short worked cases or examples that differ in one important way; the stem asks what the difference is and why it matters. Rubric of 2-4 criteria and key {"kind":"reference","text":"model answer"}.
+- Use ordering, matching and contrasting_cases only where the content really has that shape; most items stay core types.
 - hints: [nudge (points at what to look at), strategy (names the approach), worked (shows the first step)].
 - A changed_application item needs variation {"baselineItemId","changedDimensions":[...],"invariant"} with at least one non-surface change (representation, context, cueing, format, structure).
 - If sources are given, ground items in them and cite the spans used in sourceSpans. Learner sources outrank research sources.
 - Match the exam formats when a blueprint is given.
-Reply with JSON only: {"items":[{"id":"q1","subskillIds":["..."],"activityType":"apply_problem","difficulty":2,"partition":"practice","familyId":"f1","evidences":["execution"],"stem":"...","choices":null,"key":{...},"rubric":null,"distractorRationales":null,"hints":["...","...","..."],"variation":null,"sourceSpans":[]}]}`;
+Reply with JSON only: {"items":[{"id":"q1","subskillIds":["..."],"activityType":"apply_problem","difficulty":2,"partition":"practice","familyId":"f1","evidences":["execution"],"stem":"...","choices":null,"targets":null,"cases":null,"key":{...},"rubric":null,"distractorRationales":null,"hints":["...","...","..."],"variation":null,"sourceSpans":[]}]}`;
 
 export function generatorUser(input: Record<string, unknown>): string {
   return DATA("Generation request", input);
@@ -102,7 +106,8 @@ export function parseItems(text: string, nodeId: string, prefix: string): Item[]
       id, nodeId: typeof x.nodeId === "string" ? x.nodeId : nodeId, subskillIds: arr(x.subskillIds, "subskillIds").map(String),
       activityType: x.activityType as ActivityType, difficulty: Math.min(5, Math.max(1, Math.round(Number(x.difficulty) || 2))) as Item["difficulty"],
       partition: x.partition as Partition, familyId: `${prefix}.${String(x.familyId ?? x.id)}`, evidences: arr(x.evidences, "evidences").map(String) as Dimension[],
-      stem: String(x.stem ?? ""), ...(Array.isArray(x.choices) ? { choices: x.choices.map(String) } : {}), ...(isObj(x.key) ? { key: x.key as Item["key"] } : {}),
+      stem: String(x.stem ?? ""), ...(Array.isArray(x.choices) ? { choices: x.choices.map(String) } : {}),
+      ...(Array.isArray(x.targets) ? { targets: x.targets.map(String) } : {}), ...(Array.isArray(x.cases) ? { cases: x.cases.map(String) } : {}),...(isObj(x.key) ? { key: x.key as Item["key"] } : {}),
       ...(Array.isArray(x.rubric) ? { rubric: x.rubric.map(String) } : {}), ...(Array.isArray(x.distractorRationales) ? { distractorRationales: x.distractorRationales.map(String) } : {}),
       ...(hints ? { hints } : {}), ...(variation ? { variation } : {}), ...(Array.isArray(x.sourceSpans) ? { sourceSpans: x.sourceSpans.map(String) } : {}),
       ...(typeof x.format === "string" ? { format: x.format as ExamFormat } : {}),

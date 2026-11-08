@@ -24,7 +24,7 @@ export { UNITS };
 const one = process.env.EVAL_MODEL?.split("/") as [string, string] | undefined;
 const MODELS: RoleModels = one ? Object.fromEntries(Object.keys(DEFAULT_ROLE_MODELS).map(r => [r, { provider: one[0], model: one[1] }])) as RoleModels : DEFAULT_ROLE_MODELS;
 
-const LEARNER_SYSTEM = (profile: string) => `You are role-playing a real student studying for a test. Stay in character.\nWhat you know: ${profile}\nRules: answer as this student would, briefly (1-4 sentences or a short working). Make the mistakes this student would make. You learn from feedback you were given earlier in the session, but not perfectly.\nReply with JSON only: {"choice": <0-based index>} for multiple choice, otherwise {"text": "..."}.`;
+const LEARNER_SYSTEM = (profile: string) => `You are role-playing a real student studying for a test. Stay in character.\nWhat you know: ${profile}\nRules: answer as this student would, briefly (1-4 sentences or a short working). Make the mistakes this student would make. You learn from feedback you were given earlier in the session, but not perfectly.\nReply with JSON only: {"choice": <0-based index>} for multiple choice, {"indices": [...]} for ordering (choice indices in your order) or matching (target index for each item), otherwise {"text": "..."}.`;
 
 async function runUnit(u: Unit, arm: "adaptive" | "baseline", real: Awaited<ReturnType<typeof evalRuntime>>) {
   const fake = fakeRuntime();
@@ -46,8 +46,8 @@ async function runUnit(u: Unit, arm: "adaptive" | "baseline", real: Awaited<Retu
   await d.learner({ type: "plan_approved" });
   const answer = async (item: Item): Promise<ResponseInput> => {
     const r = await real.roleCall({ provider: MODELS.generator.provider, model: MODELS.generator.model, system: LEARNER_SYSTEM(u.learner),
-      user: `${memory.slice(-6).join("\n")}\n\nQuestion (${item.activityType}):\n${item.stem}${item.choices ? `\nChoices:\n${item.choices.map((c, i) => `${i}. ${c}`).join("\n")}` : ""}` });
-    try { const j = extractJson(r.text) as { choice?: number; text?: string }; return typeof j.choice === "number" && item.choices ? { kind: "choice", index: j.choice } : { kind: "text", text: String(j.text ?? r.text) }; }
+      user: `${memory.slice(-6).join("\n")}\n\nQuestion (${item.activityType}):\n${item.stem}${item.cases ? `\nCases:\n${item.cases.map((c, i) => `${"AB"[i]}. ${c}`).join("\n")}` : ""}${item.choices ? `\n${item.activityType === "matching" ? "Items" : "Choices"}:\n${item.choices.map((c, i) => `${i}. ${c}`).join("\n")}` : ""}${item.targets ? `\nTargets:\n${item.targets.map((c, i) => `${i}. ${c}`).join("\n")}` : ""}` });
+    try { const j = extractJson(r.text) as { choice?: number; indices?: unknown; text?: string }; if (Array.isArray(j.indices) && (item.activityType === "ordering" || item.activityType === "matching")) return { kind: "indices", indices: j.indices.map(Number).filter(Number.isInteger) }; return typeof j.choice === "number" && item.choices ? { kind: "choice", index: j.choice } : { kind: "text", text: String(j.text ?? r.text) }; }
     catch { return { kind: "text", text: r.text.slice(0, 500) }; }
   };
   let steps = 0, stuck = 0;

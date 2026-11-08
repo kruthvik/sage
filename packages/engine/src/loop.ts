@@ -15,7 +15,7 @@ export class EngineError extends Error {}
 const fail = (msg: string): never => { throw new EngineError(msg); };
 const DONE = new Set(["passed", "tested_out", "left_with_gaps"]);
 const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
-const textOf = (i: ResponseInput) => i.kind === "text" || i.kind === "audio_transcript" ? i.text : i.kind === "fields" ? Object.entries(i.fields).map(([k, v]) => `${k}: ${v}`).join("\n") : i.kind === "choice" ? `choice ${i.index}` : "";
+const textOf = (i: ResponseInput) => i.kind === "text" || i.kind === "audio_transcript" ? i.text : i.kind === "fields" ? Object.entries(i.fields).map(([k, v]) => `${k}: ${v}`).join("\n") : i.kind === "choice" ? `choice ${i.index}` : i.kind === "indices" ? `indices ${i.indices.join(",")}` : "";
 
 export type Actor = "learner" | "role" | "tutor" | "host";
 export interface Step { state: EngineState; effects: Effect[] }
@@ -300,6 +300,7 @@ function mergeNodes(p: Plan, ids: string[]): Plan {
 }
 
 function inputOf(a: Attempt, key: ItemKey): ResponseInput {
+  if (key.kind === "order" || key.kind === "match") return { kind: "indices", indices: (/^indices ([\d,]*)/.exec(a.response)?.[1] ?? "").split(",").filter(Boolean).map(Number) };
   return key.kind === "choice" ? { kind: "choice", index: Number(/choice (\d+)/.exec(a.response)?.[1] ?? -1) } : { kind: "text", text: a.response };
 }
 

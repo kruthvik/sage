@@ -93,8 +93,8 @@ export function startServer(opts: ServeOptions) {
       case "control.resume": return act({ type: "control", action: "resume" });
       case "item.submit": {
         const d = driver(id!), cur = d.state.current;
-        const input: ResponseInput | undefined = typeof p.choice === "number" ? { kind: "choice", index: p.choice } : typeof p.text === "string" ? { kind: "text", text: p.text } : p.fields ? { kind: "fields", fields: p.fields as Record<string, string> } : undefined;
-        if (!input) throw new RpcError(ERR.params, "give text, choice or fields");
+        const input: ResponseInput | undefined = Array.isArray(p.indices) ? { kind: "indices", indices: p.indices as number[] } : typeof p.choice === "number" ? { kind: "choice", index: p.choice } : typeof p.text === "string" ? { kind: "text", text: p.text } : p.fields ? { kind: "fields", fields: p.fields as Record<string, string> } : undefined;
+        if (!input) throw new RpcError(ERR.params, "give text, choice, indices or fields");
         const latencyMs = typeof p.latencyMs === "number" ? p.latencyMs : cur ? Date.now() - Date.parse(cur.presentedAt) : 0;
         return act({ type: "response_submitted", input, responseEventId: randomUUID(), latencyMs: Math.max(0, latencyMs) });
       }

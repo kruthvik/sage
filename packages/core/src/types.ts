@@ -49,20 +49,25 @@ export interface PlanNode {
 }
 export interface Plan { rev: number; nodes: PlanNode[]; edges: [string, string][]; approvedAt?: string }
 
-export type ActivityType = "free_recall" | "explain_why" | "apply_problem" | "conceptual_mcq" | "find_the_error" | "method_choice" | "scrap_work";
+export type ActivityType = "free_recall" | "explain_why" | "apply_problem" | "conceptual_mcq" | "find_the_error" | "method_choice" | "scrap_work"
+  | "ordering" | "matching" | "contrasting_cases"; // library activities chosen for Phase 1 (owner, 2026-11-08)
 export type Partition = "teaching" | "practice" | "assessment";
 export type ChangedDimension = "surface" | "representation" | "context" | "cueing" | "format" | "structure";
 export type ItemKey =
   | { kind: "choice"; index: number }
   | { kind: "numeric"; value: number; tolerance: number }
   | { kind: "exact"; values: string[] }
-  | { kind: "reference"; text: string }; // open response, graded by the grader role
+  | { kind: "reference"; text: string } // open response, graded by the grader role
+  | { kind: "order"; order: number[] } // ordering: choice indices in the correct sequence
+  | { kind: "match"; pairs: number[] }; // matching: pairs[i] = index into targets for choices[i]
 
 export interface Item {
   id: string; nodeId: string; subskillIds: string[]; activityType: ActivityType; difficulty: 1 | 2 | 3 | 4 | 5;
   partition: Partition; familyId: string; fingerprint?: string;
   variation?: { baselineItemId: string; changedDimensions: ChangedDimension[]; invariant: string };
   evidences: Dimension[]; stem: string; choices?: string[]; key?: ItemKey; rubric?: string[];
+  /** matching: the right-hand column. contrasting_cases: the two cases shown side by side. */
+  targets?: string[]; cases?: string[];
   distractorRationales?: string[]; hints?: [nudge: string, strategy: string, worked: string];
   format?: ExamFormat; validated?: boolean; keyVerifiedBy?: "calculate" | "model" | "none"; sourceSpans?: string[];
   /** Set when a learner dispute showed the key was wrong: the item never counts as evidence and is never presented again. */
@@ -114,6 +119,7 @@ export interface SessionState {
 
 /** Voice recall is deferred (SPEC §16); only the input shape is defined. */
 export type ResponseInput = { kind: "text"; text: string } | { kind: "choice"; index: number } | { kind: "fields"; fields: Record<string, string> }
+  | { kind: "indices"; indices: number[] } // ordering (sequence of choice indices) and matching (target index per choice)
   | { kind: "image"; blobHashes: string[] } | { kind: "audio_transcript"; text: string };
 
 /** Researcher output (owner reply 2). Each item goes through the normal preview → accept source flow. */
