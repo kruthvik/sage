@@ -47,6 +47,12 @@
     "packages/sage-extension": {
       "name": "@sage/sage-extension",
     },
+    "packages/sources": {
+      "name": "@sage/sources",
+      "dependencies": {
+        "pdf-lib": "1.17.1",
+      },
+    },
     "packages/storage": {
       "name": "@sage/storage",
     },
@@ -155,6 +161,8 @@
     "@sage/sage-extension": ["@sage/sage-extension@workspace:packages/sage-extension"],
 
     "@sage/server": ["@sage/server@workspace:apps/server"],
+
+    "@sage/sources": ["@sage/sources@workspace:packages/sources"],
 
     "@sage/storage": ["@sage/storage@workspace:packages/storage"],
 
