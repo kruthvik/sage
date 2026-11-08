@@ -233,8 +233,8 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. The remaining eval notes: flash grader JSON failures after retry, and ww1 long-form passes nothing.
-2. The tutor's services are also reused across turns. Check it doesn't hit the same stale extension context. It has no extension tools active, so it's probably fine.
+1. ww1 rerun on flash, to see the hypothesis fix (d90cd18) work live. The flash grader JSON failures are already fixed: `submit_grade` gave 0 errors in 92 grades.
+2. The tutor's services are reused across turns, but it can't hit the stale extension context. pi-web-access uses its stored ctx only inside its own tools and widget, and the tutor never activates those tools (checked by reading the code).
 3. The real Cram session waits until there's a GUI (owner 2026-11-08: the dev console is too hard to use, and no GUI yet).
 
 ## Commands
