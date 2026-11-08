@@ -40,8 +40,9 @@ function fallback(fx: TutorTurnFx, s: EngineState, apply: TutorDeps["apply"]): s
       if (!apply({ type: "move_selected", candidateId: c.id, reasonCodes: ["fallback_first_candidate"], nextIntendedMove: c.kind }, "tutor")) return `selected ${c.kind}`;
   }
   if (fx.phase === "check" || fx.phase === "prime" || fx.phase === "diagnostic") {
-    const it = [...s.items.values()].find(i => i.partition === "practice" && !s.deliveredAt.has(i.id) && (fx.phase === "diagnostic" || i.nodeId === s.activeNodeId));
-    if (it && !apply({ type: "item_presented", itemId: it.id }, "tutor")) return `presented ${it.id}`;
+    // Every unused practice item in bank order; the engine rejects the ones that don't fit (variation baseline unseen, same family as a failure).
+    for (const it of [...s.items.values()].filter(i => i.partition === "practice" && i.validated && !s.deliveredAt.has(i.id) && (fx.phase === "diagnostic" || i.nodeId === s.activeNodeId)))
+      if (!apply({ type: "item_presented", itemId: it.id }, "tutor")) return `presented ${it.id}`;
   }
   return undefined;
 }

@@ -39,13 +39,13 @@ export function fakeRuntime(opts: { nodes?: number } = {}): DriverRuntime {
     const calls: TutorTurnResult["calls"] = [];
     const call = (name: string, params: Record<string, unknown>) => { const t = i.tools.find(x => x.name === name)!; const result = t.run(params); calls.push({ name, params, result }); return result.startsWith("ok"); };
     const sub = i.user.match(/^- (\S+) \((?:declarative|procedural)/m)?.[1];
-    const item = [...i.user.matchAll(/^- (\S+) practice /gm)].map(m => m[1]!)[0];
+    const items = [...i.user.matchAll(/^- (\S+) practice /gm)].map(m => m[1]!);
     const cand = i.user.match(/^- (\S+) (?!checkpoint)\w+ →/m)?.[1];
     let ended = false;
     if (i.active.includes("select_move") && cand) ended = call("select_move", { candidateId: cand, reasonCodes: ["baseline"], nextIntendedMove: "follow the first candidate" });
     else if (i.user.includes("## Task\nTeach") && sub) ended = call("present", { text: "Here is the idea in one sentence, with one example.", subskillIds: [sub] });
-    else if (i.active.includes("present") && item) ended = call("present", { itemId: item });
-    else if (i.active.includes("activity") && sub) { const k = ++n; ended = call("activity", { activityType: "free_recall", subskillIds: [sub], evidences: ["recall"], difficulty: 2,
+    else if (i.active.includes("present") && items.length) ended = items.some(id => call("present", { itemId: id })); // first one the engine accepts
+    if (!ended && i.active.includes("activity") && sub && !i.active.includes("select_move")) { const k = ++n; ended = call("activity", { activityType: "free_recall", subskillIds: [sub], evidences: ["recall"], difficulty: 2,
       stem: `Name the idea filed under ${word(k + 500)} in the ${word(k * 11 + 9)} notes.`, key: { kind: "exact", values: [`term${k}`] } }); }
     return { ended, calls, text: i.active.includes("present") || i.active.includes("select_move") ? "" : "Fix the flagged part and try again.", usage: { input: Math.ceil(i.user.length / 4), output: 30, costUsd: 0.0001 }, ms: 0 };
   };
