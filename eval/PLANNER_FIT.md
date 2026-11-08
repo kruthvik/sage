@@ -46,3 +46,30 @@ The hint is computed in code from `gateMinutes` (per-subskill cost and node-chec
 
 - No hint: 0/10 fit (165–272 min, about 2× budget). Shipped hint: 10/10 fit (70–110 min), 3 nodes each, every unit's objective still covered (titles above). Planner calls also got ~40% cheaper (smaller output).
 - Total spend for this experiment: about $0.13.
+
+## Flash (antigravity/gemini-3.8-flash), same hint
+
+| unit | arm | budget | gate estimate | fits | nodes | subskills | cost | node titles |
+|---|---|---|---|---|---|---|---|---|
+| calc | current | 90 | 135 | no | 5 | 9 | 0.0006 | Power Rule & Linearity (Constant Multiple & Sum/Difference); Product Rule; Quotient Rule (Complementary Shortcut); Chain Rule for Composite Functions; Combined Multi-Rule Problems & Rule Selection Strategy |
+| calc | current | 90 | 119 | no | 4 | 9 | 0.0005 | Power Rule and Constant Multiple/Sum Rules; Product Rule; Chain Rule for Composite Functions; Combined Product and Chain Rule Problems |
+| calc | hint | 90 | 90 | yes | 3 | 6 | 0.0004 | Power Rule and Basic Linear Combinations; Product Rule; Chain Rule and Combined Rule Selection |
+| calc | hint | 90 | 90 | yes | 3 | 6 | 0.0004 | Power Rule and Basic Linear Combinations; Product Rule; Chain Rule and Combined Rules |
+| resp | current | 90 | 126 | no | 5 | 10 | 0.0006 | Cellular Respiration Big Picture & Compartmentalization; Glycolysis & Anaerobic Fate (Fermentation); Pyruvate Oxidation & the Citric Acid Cycle; Electron Transport Chain & Oxidative Phosphorylation; ATP Accounting & Disruption by Poisons/Uncouplers |
+| resp | current | 90 | 140 | no | 5 | 12 | 0.0006 | Core Energetics and Cellular Geography; Glycolysis and Substrate-Level Phosphorylation; Pyruvate Oxidation and the Citric Acid (Krebs) Cycle; Electron Transport Chain and Chemiosmosis; Whole-Pathway Accounting and Fermentation |
+| resp | hint | 90 | 74 | yes | 3 | 6 | 0.0004 | Glycolysis and Pyruvate Oxidation; The Citric Acid (Krebs) Cycle; Oxidative Phosphorylation and ATP Accounting |
+| resp | hint | 90 | 74 | yes | 3 | 6 | 0.0004 | Glycolysis and Pyruvate Oxidation; The Krebs (Citric Acid) Cycle; Oxidative Phosphorylation and the Electron Transport Chain |
+| ww1 | current | 120 | 126 | no | 5 | 11 | 0.0006 | Long-Term Structural Causes (M-A-I-N); Pre-War Crises and Escalation (1905–1913); The July Crisis and the Outbreak of War (1914); Historiographical Debates on War Guilt; Essay Synthesis: Weighting and Structuring Arguments |
+| ww1 | current | 120 | 96 | yes | 4 | 8 | 0.0003 | Long-Term Structural Causes (MAIN); The July Crisis of 1914 & Escalation Cascade; Historiographical Debates on War Guilt & Causation; Essay Synthesis & Thematic Argument Construction |
+| ww1 | hint | 120 | 93 | yes | 3 | 8 | 0.0005 | Long-Term Structural Causes (M-A-I-N); The July Crisis and the Mechanism of Escalation; Historiography and Essay Argumentation |
+| ww1 | hint | 120 | 81 | yes | 3 | 7 | 0.0004 | Long-Term Structural Causes (MAIN); The July Crisis and the Short-Term Catalyst; Historiographical Synthesis & Essay Argumentation |
+| esp | current | 90 | 134 | no | 5 | 10 | 0.0006 | Core Aspect Distinction: Completed Events vs. Ongoing/Habitual Context; Time Markers and Trigger Phrases; Verbs That Shift Meaning by Tense; Foreground vs. Background and Interrupted Actions; Storytelling & Spoken-Response Text Simulation |
+| esp | current | 90 | 138 | no | 5 | 10 | 0.0006 | Core aspectual distinction: completed events vs. background states; Temporal trigger words and frequency markers; Verbs that change meaning between preterite and imperfect; Interrupted actions and simultaneous events in storytelling; Oral exam rapid narrative simulation (scripted text practice) |
+| esp | hint | 90 | 71 | yes | 3 | 5 | 0.0004 | Aspectual Functions and Temporal Trigger Words; Foreground vs. Background and Interrupted Actions; Oral-Style Prompt Analysis and Justification |
+| esp | hint | 90 | 82 | yes | 3 | 6 | 0.0004 | Aspectual Core & Trigger Words; Narrative Interruption & Dual Aspect Sentences; Integrated Oral-Style Storytelling |
+| aid | current | 120 | 195 | no | 5 | 16 | 0.0009 | Scene Safety and Primary Assessment; The Recovery Position; High-Quality Adult CPR Mechanics; AED Integration and Operational Safety; Workplace Resuscitation Scenarios and Special Circumstances |
+| aid | current | 120 | 177 | no | 5 | 14 | 0.0008 | Scene Safety and Primary Assessment (DRSABCD); The Recovery Position; Adult High-Quality Chest Compressions; Rescue Breaths and Full CPR Cycles (30:2); Automated External Defibrillator (AED) Integration |
+| aid | hint | 120 | 100 | yes | 3 | 7 | 0.0004 | Scene Assessment, Responsiveness, and Decision Protocol; Adult CPR Mechanics and Rhythms; Recovery Position Execution and Monitoring |
+| aid | hint | 120 | 92 | yes | 3 | 7 | 0.0005 | Scene Assessment, Responsiveness, and Call for Help; Adult CPR Technique and Protocol (30:2); The Recovery Position for Unresponsive Breathing Victims |
+
+- Flash without the hint: 1/10 fit (96–195 min). With it: 10/10 (71–100 min). Cost ≈ $0.01 for all 20 calls.
