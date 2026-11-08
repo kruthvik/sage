@@ -137,10 +137,10 @@ export const GRADER_CALIBRATION: Record<string, string> = {
   "antigravity/gemini-3.8-flash": "fails calibration: lenient on weak answers",
 };
 
-/** Owner defaults (2026-11-08: flash first, terra over sol). User-selectable in settings; sol stays a supported choice; never a Claude model (owner M0). */
+/** Owner defaults (2026-11-08: models in order of preference terra → flash → sol; sol costs more). Provider "openai" = Sign in with ChatGPT. User-selectable in settings; never a Claude model (owner M0). */
 export const DEFAULT_ROLE_MODELS: RoleModels = {
-  planner: { provider: "openai-codex", model: "gpt-6.1-terra", reasoning: "low" }, // sol needed low to meet the 60 s deadline; terra not yet measured
-  tutor: { provider: "openai-codex", model: "gpt-6.1-terra" },
+  planner: { provider: "openai", model: "gpt-6.1-terra", reasoning: "low" }, // sol needed low to meet the 60 s deadline; terra not yet measured
+  tutor: { provider: "openai", model: "gpt-6.1-terra" },
   grader: { provider: "openai", model: "gpt-6.1-sol" },  // owner rule: cheapest model passing every calibration repeat (eval/CALIBRATION-openai-gpt-6.1-sol.md); "openai" = the owner's Sign in with ChatGPT login
   generator: { provider: "antigravity", model: "gemini-3.8-flash" },
   feynman: { provider: "antigravity", model: "gemini-3.8-flash" },

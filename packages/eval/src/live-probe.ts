@@ -7,7 +7,7 @@ import type { Effect, EngineEvent } from "../../engine/src/state.ts";
 import { goal } from "./fixture.ts";
 
 const m = (s: string, reasoning?: RoleModel["reasoning"]): RoleModel => { const [provider, model] = s.split("/") as [string, string]; return { provider, model, ...(reasoning ? { reasoning } : {}) }; };
-const strong = process.env.STRONG ?? "openai-codex/gpt-6.1-sol", cheap = process.env.CHEAP ?? "antigravity/gemini-3.8-flash";
+const strong = process.env.STRONG ?? "openai/gpt-6.1-sol", cheap = process.env.CHEAP ?? "antigravity/gemini-3.8-flash";
 const models: RoleModels = { planner: m(strong, "low"), tutor: m(strong), grader: m(strong), generator: m(cheap), feynman: m(cheap), summarizer: m(cheap), researcher: m(cheap), checker: m(cheap) };
 const rt = await evalRuntime([...new Set([strong, cheap].map(x => x.split("/")[0]!))]);
 const g = goal({ objective: process.argv[2] ?? "Pass a beginner sourdough bread practical next week", timeBudgetMin: 90 });
