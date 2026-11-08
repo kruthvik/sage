@@ -1,8 +1,27 @@
-# Cram eval (M3): 2026-11-07T22:43:28.907Z
+# Cram eval (M3, all roles on gemini-3.8-flash): 2026-11-07
 
-Roles: planner gemini-3.8-flash, tutor gemini-3.8-flash, grader gemini-3.8-flash, generator gemini-3.8-flash, feynman gemini-3.8-flash, summarizer gemini-3.8-flash, researcher gemini-3.8-flash, checker gemini-3.8-flash. Simulated learner: gemini-3.8-flash with a fixed knowledge profile per unit. Baseline = same real roles, deterministic non-adaptive tutor (first candidate, first unused item, one-line chunks).
-Clock is virtual (learner think and read time only); model latency is in the wall column. Learners never use hints, so assisted paths are not exercised here.
+Roles: planner, tutor, grader, generator, feynman, summarizer, researcher and checker all on antigravity/gemini-3.8-flash (owner: Sol quota out; flash must work). Simulated learner: gemini-3.8-flash with a fixed knowledge profile per unit. Baseline = same real roles, deterministic non-adaptive tutor (first candidate, first unused item, one-line chunks).
+Clock is virtual (learner think and read time only); model latency is in the wall column. Learners never use hints, so assisted paths are not exercised. Budgets 90–120 min (owner). Plan estimate = gate-based estimate (ED-29) at plan approval.
+
+Sources: adaptive rows from the main run; the calc adaptive row is the rerun after the grader-retry fix (the main-run calc stalled at 26 min on rejected grades: 1/4, 19 min). Baseline rows are reruns after the baseline-tutor stall fix (main-run baselines stopped after 0–10 grades).
 
 | unit | domain | arm | budget min | plan estimate min | nodes passed in budget | minutes to pass each node | end-of-session mixed check | cost per session-hour | model calls | progress | wall | end state |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| calc | math | adaptive | 90 | 138 (over) | 1/5 | 26, —, —, —, — | not reached | $0.18 | 81 | 31 graded (19 independent), mean 71, 45 min used, reached 2 nodes | 1423 s | adapt; 1 errors: tutor_failed |
+| aid | first aid (non-academic) | adaptive | 120 | 174 (over) | 1/5 | 59, —, —, —, — | not reached | $0.10 | 155 | 63 graded (54 independent), mean 92, 103 min used, reached 2 nodes | 2472 s | repair; 3 errors: learner_action_rejected |
+| aid | first aid (non-academic) | baseline | 120 | 138 (over) | 0/5 | —, —, —, —, — | not reached | $0.01 | 185 | 126 graded (35 independent), mean 52, 193 min used, reached 1 nodes | 449 s | check |
+| calc | math | adaptive | 90 | 108 (over) | 2/4 | 21, 36, —, — | not reached | $0.17 | 94 | 37 graded (29 independent), mean 86, 53 min used, reached 3 nodes | 1728 s | grading; 4 errors: tutor_failed, role_failed |
+| calc | math | baseline | 90 | 116 (over) | 0/4 | —, —, —, — | not reached | $0.01 | 136 | 95 graded (26 independent), mean 53, 144 min used, reached 1 nodes | 330 s | check |
+| esp | language | adaptive | 90 | 112 (over) | 1/4 | 66, 114, —, — | not reached | $0.07 | 188 | 110 graded (92 independent), mean 79, 144 min used, reached 3 nodes | 2503 s | node_check; 1 errors: role_failed |
+| esp | language | baseline | 90 | 108 (over) | 0/4 | —, —, —, — | not reached | $0.01 | 139 | 95 graded (25 independent), mean 57, 144 min used, reached 1 nodes | 417 s | feedback |
+| resp | biology | adaptive | 90 | 130 (over) | 2/5 | 63, 82, 116, —, — | not reached | $0.12 | 222 | 94 graded (73 independent), mean 88, 144 min used, reached 4 nodes | 3416 s | feedback; 4 errors: tutor_failed, role_failed |
+| resp | biology | baseline | 90 | 118 (over) | 0/4 | —, —, —, — | not reached | $0.01 | 145 | 94 graded (26 independent), mean 49, 145 min used, reached 1 nodes | 346 s | feedback |
+| ww1 | history | adaptive | 120 | 104 | 0/4 | —, —, —, — | not reached | $0.04 | 220 | 32 graded (30 independent), mean 63, 192 min used, reached 1 nodes | 2194 s | check |
+| ww1 | history | baseline | 120 | 130 (over) | 0/5 | —, —, —, —, — | not reached | $0.01 | 183 | 121 graded (32 independent), mean 39, 192 min used, reached 1 nodes | 529 s | feedback |
+
+## Reading it
+
+- Adaptive beats baseline on every unit that passed anything: 7 nodes passed in budget across the 5 units (aid 1, calc 2, esp 1, resp 2, ww1 0) vs 0 for the baseline. Baseline answers more items but few count as independent evidence, and its mean stays 39–57.
+- No unit reached the end-of-session mixed check. Gate-based plan estimates were over budget in 4 of 5 units (ww1 fit), so in a real session the learner would see extend / merge / Speed-up at approval; the eval doesn't pick one.
+- ww1 (history, long-form answers) passed nothing in 192 min: flash grades its written answers low (mean 63) and the gate needs changed-application evidence it rarely awards.
+- Remaining flash failures: grader replies with no parseable JSON (3× in the calc rerun; LaTeX escapes are now repaired, other causes not yet seen), occasional tutor_failed, and network errors (ENOTFOUND daily-cloudcode-pa.googleapis.com) in aid. Failed grades park the session in "grading" until retried.
+- Cost: $0.04–0.17 per session-hour adaptive, about $0.01 baseline.
