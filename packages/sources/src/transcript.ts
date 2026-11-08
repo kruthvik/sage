@@ -40,8 +40,9 @@ export function parseYoutubeTranscript(text: string): TranscriptSegment[] | unde
   if (withText.length < blocks.length * 0.8) return undefined;
   for (let i = 1; i < blocks.length; i++) if (blocks[i]!.seconds < blocks[i - 1]!.seconds) return undefined; // not one video's transcript
   // Chapter layout: segments are one line each, so an extra trailing line is the heading of the chapter that starts next.
+  // If more than ~15% of segments would get one, the extra lines are wrapped segment text instead, and are joined.
   const multi = blocks.filter(b => b.lines.length > 1);
-  const chapters = multi.length > 0 && multi.length <= blocks.length / 2 && multi.every(b => b.lines.length === 2 && b.lines[1]!.length <= 100);
+  const chapters = multi.length > 0 && multi.length <= blocks.length * 0.15 && multi.every(b => b.lines.length === 2 && b.lines[1]!.length <= 100);
   const out: TranscriptSegment[] = [];
   let chapter = chapters ? pre.at(-1) : undefined;
   for (const b of blocks) {

@@ -52,7 +52,9 @@ ws.onopen=async()=>{for(const s of await rpc('session.list')){const o=document.c
 ws.onmessage=m=>{const x=JSON.parse(m.data);if(x.id&&pending[x.id]){x.error?pending[x.id].rej(new Error(x.error.message)):pending[x.id].res(x.result);delete pending[x.id];return}
  if(x.method!=='event')return;const e=x.params,d=e.data;log(e.event+' '+JSON.stringify(d).slice(0,400),e.event==='error'?'err':'');show(e.event,d)};
 function show(ev,d){const st=$('stage');const box=h=>{const div=document.createElement('div');div.innerHTML=h;st.prepend(div)};const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
- if(ev==='tutor.done')box('<b>Tutor</b><p>'+esc(d.text)+'</p>');
+ const q=s=>esc(s).replace(/"/g,'&quot;');
+ const cites=l=>(l||[]).length?'<p class="mute">Source: '+l.map(c=>c.link?'<a href="'+q(c.link)+'" data-span="'+q(c.spanId)+'" onclick="openSrc(this)" target="_blank" rel="noopener noreferrer">'+esc(c.title+' '+c.locator)+'</a>':esc(c.title+' '+c.locator)).join('; ')+'</p>':'';
+ if(ev==='tutor.done')box('<b>Tutor</b><p>'+esc(d.text)+'</p>'+cites(d.citations));
  if(ev==='item.present'){const it=d.item,t=it.activityType,slots=t==='ordering'||t==='matching';$('answer').hidden=slots;
   const opts=a=>'<option value="">choose</option>'+a.map((x,j)=>'<option value="'+j+'">'+esc(x)+'</option>').join('');
   const body=t==='ordering'?(it.choices||[]).map((_,p)=>'<label class="slot">Step '+(p+1)+' <select class="seq">'+opts(it.choices)+'</select></label>').join('')
@@ -62,14 +64,16 @@ function show(ev,d){const st=$('stage');const box=h=>{const div=document.createE
   box('<b>'+esc(t)+'</b>'+(d.cueText?'<p><i>'+esc(d.cueText)+'</i></p>':'')+'<p>'+esc(it.stem)+'</p>'+cases+body+(slots?'<p><button class="primary" onclick="seq(this)">Submit</button></p>':'')
    +(t==='scrap_work'?'<p><label>Photo of your working <input type="file" class="photo" accept="image/png,image/jpeg,image/webp" multiple></label> <button onclick="photo(this)">Send photo</button> <span class="mute">or type your working below</span></p>':''))}
  if(ev==='transcription.review')box('<b>Check the transcription</b><p>Fix anything that was misread. Only the text you confirm is graded.</p><textarea class="tr" rows="8" aria-label="Transcription of your working">'+esc(d.text)+'</textarea><p><button class="primary" onclick="confirmTr(this)">Confirm and submit</button></p>');
- if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;const q=s=>esc(s).replace(/"/g,'&quot;');
-  box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>'+((d.citations||[]).length?'<p class="mute">Source: '+d.citations.map(c=>c.link?'<a href="'+q(c.link)+'" target="_blank" rel="noopener noreferrer">'+esc(c.title+' '+c.locator)+'</a>':esc(c.title+' '+c.locator)).join('; ')+'</p>':''))}
+ if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;
+  box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>'+cites(d.citations))}
  if(ev==='repair.required')box('<b>Fix this first</b><ul>'+d.flaws.map(f=>'<li>"'+esc(f.quote)+'": '+esc(f.problem)+'</li>').join('')+'</ul>');
  if(ev==='hint.reveal')box('<b>Hint</b><p>'+esc(d.text)+'</p>');
  if(ev==='plan.changed'||ev==='notice'||ev==='pace.notice'||ev==='research.ready')box('<i>'+esc(d.text)+'</i>');
  if(ev==='plan.changed')call('plan.get').then(p=>p&&box('<b>Plan</b><ol>'+p.nodes.map(n=>'<li>'+esc(n.title)+' <span class="mute">('+n.estMinutes+' min; '+n.subskills.map(x=>esc(x.statement)).join('; ')+')</span></li>').join('')+'</ol>'));
  if(ev==='plan.fit'&&!d.fits){fit=d;box('<b>Plan does not fit the time</b><p>'+esc(d.text)+'</p><button onclick="extend()">Extend to '+d.estMin+' min</button><button onclick="merge()">Merge nodes</button><button onclick="speed()">Start in Speed-up</button>')}
 }
+// Opening a source while an item waits for an answer is logged as assistance (like Peek chunk); the link still opens.
+const openSrc=a=>{if(sid)call('source.open',{spanId:a.dataset.span})};
 const picked=()=>[...document.querySelectorAll('input.srcuse:checked')].map(x=>x.value);
 async function sources(){const l=await rpc('sources.list',{}).catch(()=>[]);const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
  $('srclist').innerHTML=l.filter(s=>s.status!=='removed').map(s=>'<div class="ev"><label><input type="checkbox" class="srcuse" value="'+esc(s.sourceId)+'"'+(s.status==='accepted'&&s.shareWithModels?'':' disabled')+'> <b>'+esc(s.title)+'</b></label> <span class="mute">'+esc(s.kind)+(s.examSample?', past exam':'')+' · '+s.spans+' spans · '+esc(s.status)+(s.status==='accepted'&&!s.shareWithModels?' (not shared)':'')+'</span>'

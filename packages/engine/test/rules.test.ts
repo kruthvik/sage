@@ -107,3 +107,20 @@ test("accelerate test-out needs independent changed-task evidence for every requ
   expect(s.attempts[0]!.grade!.score0to100).toBe(100);
   expect(s.plan!.nodes[0]!.status).not.toBe("tested_out");
 });
+
+test("chunks cite their node's source spans; opening a source mid-item is assistance: nudge without key terms, strategy with", () => {
+  let s = go(initialState(), { type: "session_created", sessionId: "s", goal: goal({ pace: "speed_up" }) }, "learner").state;
+  s = go(s, { type: "plan_proposed", plan }, "role").state;
+  s = go(s, { type: "plan_approved" }, "learner").state;
+  s = go(s, { type: "bank_generated", purpose: "node", nodeId: "n1", items: bank("n1", "s1").map(i => ({ ...i, sourceSpans: ["src_a:r1:1"] })) }, "role").state;
+  const c = go(s, { type: "chunk_presented", text: "The exponent comes down and drops by one.", subskillIds: ["s1"] }, "tutor");
+  expect(c.effects.find(f => f.kind === "present_chunk")).toMatchObject({ sourceSpans: ["src_a:r1:1"] });
+  s = go(c.state, { type: "source_opened", spanId: "src_a:r1:1", text: "Before any item: just logged." }, "learner").state;
+  s = go(s, { type: "item_presented", itemId: "s1-p1" }, "tutor").state;
+  expect(s.current!.assistance).toEqual([]);
+  s = go(s, { type: "source_opened", spanId: "src_a:r1:1", text: "The power rule brings the exponent down." }, "learner").state;
+  s = go(s, { type: "source_opened", spanId: "src_a:r1:2", text: "At x = 3 the derivative is 27." }, "learner").state;
+  expect(s.current!.assistance.map(x => [x.kind, x.answerBearing])).toEqual([["nudge", false], ["strategy", true]]);
+  s = go(s, { type: "response_submitted", input: { kind: "text", text: "27" }, responseEventId: "r", latencyMs: 1 }, "learner").state;
+  expect(s.attempts.at(-1)!.independent).toBe(false);
+});

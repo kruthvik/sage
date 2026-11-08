@@ -121,6 +121,12 @@ export function startServer(opts: ServeOptions) {
       }
       case "hint.request": return act({ type: "hint_requested", level: p.level as 1 | 2 | 3 });
       case "chunk.peek": return act({ type: "chunk_peeked" });
+      case "source.open": {
+        const sid = String(p.spanId).split(":")[0]!, span = sources.get(sid) ? sources.spans(sid).find(e => e.spanId === p.spanId) : undefined;
+        if (!span) throw new RpcError(ERR.params, "unknown span");
+        await act({ type: "source_opened", spanId: span.spanId, text: span.text });
+        return { link: span.link ?? null };
+      }
       case "feedback.ack": return act({ type: "feedback_acked", attemptId: p.attemptId as string });
       case "grade.dispute": return act({ type: "grade_disputed", attemptId: p.attemptId as string, argument: p.argument as string });
       case "pace.set": return act({ type: "pace_set", pace: p.pace as "normal" | "speed_up" });

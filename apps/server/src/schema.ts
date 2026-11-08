@@ -34,6 +34,7 @@ export const METHODS: Record<string, MethodSpec> = {
   "item.submit": { params: obj({ ...sid, text: { type: "string", maxLength: 8000 }, choice: { type: "integer", minimum: 0 }, indices: { type: "array", items: { type: "integer", minimum: 0 } }, fields: { type: "object" }, latencyMs: { type: "number", minimum: 0 } }, ["sessionId"]), learner: true },
   "hint.request": { params: obj({ ...sid, level: { enum: [1, 2, 3] } }, ["sessionId", "level"]), learner: true },
   "chunk.peek": { params: obj(sid, ["sessionId"]), learner: true },
+  "source.open": { params: obj({ ...sid, spanId: { type: "string", minLength: 3, maxLength: 200 } }, ["sessionId", "spanId"]), learner: true },
   "feedback.ack": { params: obj({ ...sid, attemptId: str }, ["sessionId", "attemptId"]), learner: true },
   "grade.dispute": { params: obj({ ...sid, attemptId: str, argument: { type: "string", minLength: 1, maxLength: 2000 } }, ["sessionId", "attemptId", "argument"]), learner: true, note: "model grades any time; answer-key items while their feedback shows (a wrong key voids and replaces the item)" },
   "pace.set": { params: obj({ ...sid, pace: { enum: ["normal", "speed_up"] } }, ["sessionId", "pace"]), learner: true },

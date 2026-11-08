@@ -43,6 +43,8 @@ export type EngineEvent =
   | { type: "item_presented"; itemId: string; adhoc?: Item }
   | { type: "hint_requested"; level: 1 | 2 | 3 }
   | { type: "chunk_peeked" }
+  /** The learner opened a cited source span. The host fills `text` from the source store, never from the client. */
+  | { type: "source_opened"; spanId: string; text: string }
   | { type: "response_submitted"; input: ResponseInput; responseEventId: string; latencyMs: number }
   | { type: "grade_received"; attemptId: string; grade: Grade }
   | { type: "key_dispute_resolved"; attemptId: string; keyWrong: boolean; correctedKey?: ItemKey; reason: string }
@@ -67,7 +69,7 @@ export type EngineEvent =
 
 /** Who may emit each event (DESIGN.md). The reducer rejects anything else, so a model can't author learner work (F10). */
 export const EVENT_ACTOR: Record<EngineEvent["type"], "learner" | "role" | "tutor" | "host"> = {
-  session_created: "learner", plan_edited: "learner", plan_approved: "learner", hint_requested: "learner", chunk_peeked: "learner",
+  session_created: "learner", plan_edited: "learner", plan_approved: "learner", hint_requested: "learner", chunk_peeked: "learner", source_opened: "learner",
   response_submitted: "learner", feedback_acked: "learner", grade_disputed: "learner", control: "learner", pace_set: "learner",
   time_extended: "learner", reviews_consented: "learner", research_pack_accepted: "learner", research_requested: "tutor", research_pack_received: "role",
   plan_proposed: "role", bank_generated: "role", grade_received: "role", key_dispute_resolved: "role", plan_nodes_merged: "learner", digest_written: "role", role_call_logged: "host",
@@ -78,7 +80,7 @@ export const EVENT_ACTOR: Record<EngineEvent["type"], "learner" | "role" | "tuto
 export type Effect =
   | { kind: "call_role"; role: "planner" | "generator" | "grader" | "summarizer" | "researcher" | "transcriber"; purpose: string; background?: boolean; input: Record<string, unknown> }
   | { kind: "tutor_turn"; phase: LoopPhase; tools: readonly string[]; candidates: Candidate[] }
-  | { kind: "present_chunk"; text: string }
+  | { kind: "present_chunk"; text: string; sourceSpans?: string[] }
   | { kind: "present_item"; item: PublicItem; cueText?: string }
   | { kind: "reveal_hint"; level: 1 | 2 | 3; text: string }
   | { kind: "show_chunk"; text: string }

@@ -15,10 +15,25 @@ test("plain layout: timestamp lines then text, hours, screen-reader labels dropp
   expect(clock(3723)).toBe("1:02:03");
 });
 
+// 20 one-line segments, 5 s apart; `extra` maps a segment index to a line pasted before it (a heading, or wrapped text).
+const paste = (extra: Record<number, string>, lead = "") => (lead ? lead + "\n" : "") +
+  Array.from({ length: 20 }, (_, i) => `${clock(i * 5)}\nsegment ${i}${extra[i + 1] ? `\n${extra[i + 1]}` : ""}`).join("\n");
+
 test("chapter layout: a heading line between segments starts a chapter", () => {
-  const s = parseYoutubeTranscript("Intro\n0:00\nhi\n0:03\nplan for today\nLimits\n0:09\na limit is\n0:15\nwhat f approaches\nDerivatives\n1:10\nslope of the tangent")!;
-  expect(s.map(x => [x.seconds, x.chapter, x.text])).toEqual([[0, "Intro", "hi"], [3, "Intro", "plan for today"], [9, "Limits", "a limit is"], [15, "Limits", "what f approaches"], [70, "Derivatives", "slope of the tangent"]]);
-  expect(transcriptParts(s).map(p => p.locator)).toEqual(["0:00–0:09 · Intro", "0:09–1:10 · Limits", "1:10–1:10 · Derivatives"]);
+  const s = parseYoutubeTranscript(paste({ 8: "Limits", 15: "Derivatives" }, "Intro"))!;
+  expect(s).toHaveLength(20);
+  expect([s[0]!.chapter, s[7]!.chapter, s[8]!.chapter, s[14]!.chapter, s[15]!.chapter, s[19]!.chapter]).toEqual(["Intro", "Intro", "Limits", "Limits", "Derivatives", "Derivatives"]);
+  expect(s.every(x => /^segment \d+$/.test(x.text))).toBe(true);
+  expect(transcriptParts(s).map(p => p.locator)).toEqual(["0:00–0:40 · Intro", "0:40–1:15 · Limits", "1:15–1:35 · Derivatives"]);
+});
+
+test("more than ~15% 'headings' means wrapped segment text: joined, no chapters", () => {
+  const wrapped = { 2: "and more", 5: "continued here", 9: "still going", 13: "the rest", 17: "end of thought" }; // 5 of 20 = 25%
+  const s = parseYoutubeTranscript(paste(wrapped))!;
+  expect(s).toHaveLength(20);
+  expect(s.every(x => !x.chapter)).toBe(true);
+  expect(s[1]!.text).toBe("segment 1 and more");
+  expect(s[16]!.text).toBe("segment 16 end of thought");
 });
 
 test("inline layout and non-transcripts", () => {

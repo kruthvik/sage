@@ -151,7 +151,7 @@ export class SessionDriver {
         } catch (e) { this.failed = fx; this.out("error", { code: "tutor_failed", phase: fx.phase, message: (e as Error).message, retry: true }); }
         return;
       }
-      case "present_chunk": return this.out("tutor.done", { text: fx.text, kind: "chunk" });
+      case "present_chunk": { const citations = fx.sourceSpans?.length ? this.sources?.cite?.(fx.sourceSpans) ?? [] : []; return this.out("tutor.done", { text: fx.text, kind: "chunk", ...(citations.length ? { citations } : {}) }); }
       case "transcription_review": return this.out("transcription.review", { itemId: fx.itemId, text: fx.text });
       case "present_item": return this.out("item.present", { item: fx.item, ...(fx.cueText ? { cueText: fx.cueText } : {}) });
       case "present_feedback": {

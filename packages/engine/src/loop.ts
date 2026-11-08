@@ -88,7 +88,8 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       s.chunk = { text: ev.text, nodeId: node.id, subskillIds: ev.subskillIds, exampleItemId: ev.exampleItemId, at: now };
       s.chunkCollapsed = false; s.phase = "check";
       log(s, now, "chunk", ev.text.slice(0, 80));
-      fx.push({ kind: "present_chunk", text: ev.text }, turn(s));
+      const spans = chunkSpans(s, node.id, ev.subskillIds, ev.exampleItemId);
+      fx.push({ kind: "present_chunk", text: ev.text, ...(spans.length ? { sourceSpans: spans } : {}) }, turn(s));
       return;
     }
     case "item_presented": {
@@ -139,6 +140,16 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       const answerBearing = leaksKey(s.chunk!.text, item);
       cur.assistance.push({ kind: "chunk_peek", stage: "exposed", answerBearing, itemId: item.id, at: now });
       fx.push({ kind: "show_chunk", text: s.chunk!.text });
+      return;
+    }
+    case "source_opened": {
+      // Citations are shown with chunks and feedback, never on an item; but a link can still be opened while an item waits for an
+      // answer. That is logged like chunk.peek: a nudge if the span lacks the key terms, a strategy (answer-bearing) if it has them.
+      const cur = s.current;
+      if (!cur || s.pendingAttemptId || s.feedbackAttemptId || s.phase === "repair") { log(s, now, "source", ev.spanId); return; }
+      const item = s.items.get(cur.itemId)!, answerBearing = leaksKey(ev.text, item);
+      cur.assistance.push({ kind: answerBearing ? "strategy" : "nudge", stage: "exposed", answerBearing, itemId: item.id, at: now });
+      log(s, now, "source", `${ev.spanId} during ${item.id}${answerBearing ? " (has key terms)" : ""}`);
       return;
     }
     case "response_submitted": return submit(s, ev, now, fx);
@@ -676,6 +687,13 @@ export function sessionState(s: EngineState): SessionState {
     candidates: s.candidates, nextIntendedMove: s.nextIntendedMove, timeUsedMin: Math.round(usedMin(s)), timeBudgetMin: s.goal?.timeBudgetMin,
     nodesPassed: s.plan?.nodes.filter(n => DONE.has(n.status)).length ?? 0, nodesTotal: s.plan?.nodes.length ?? 0, spend: s.spend,
   };
+}
+
+/** Spans to cite under a teaching chunk: those cited by the node's items for the chunk's subskills, the worked example first. */
+function chunkSpans(s: EngineState, nodeId: string, subskillIds: string[], exampleItemId?: string): string[] {
+  const its = [...s.items.values()].filter(i => i.nodeId === nodeId && i.subskillIds.some(id => subskillIds.includes(id)));
+  its.sort((a, b) => Number(b.id === exampleItemId) - Number(a.id === exampleItemId));
+  return [...new Set(its.flatMap(i => i.sourceSpans ?? []))].slice(0, 3);
 }
 
 /** Queue the researcher in the background, once per trigger key (results are cached per topic/node). Never changes the phase. */
