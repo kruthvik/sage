@@ -132,8 +132,9 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
 
 /** Grader calibration notes shown next to a model in settings (eval/CALIBRATION-*.md; owner gate 2026-11-08). */
 export const GRADER_CALIBRATION: Record<string, string> = {
-  "openai/gpt-6.1-sol": "passes calibration (3/3 repeats, MAE 2.8–3.1)",
-  "openai/gpt-6.1-terra": "nearly passes: 2/3 repeats (one at +3.2 on A1–A10, limit +3)",
+  "openai/gpt-6.1-terra@low": "passes calibration (9/9 repeats, MAE 2.4–3.4)",
+  "openai/gpt-6.1-terra": "default reasoning: 5/6 repeats (low reasoning passes 9/9)",
+  "openai/gpt-6.1-sol": "passes calibration (6/6 repeats incl. low reasoning); about 2.4× terra's cost",
   "antigravity/gemini-3.8-flash": "fails calibration: lenient on weak answers",
 };
 
@@ -141,7 +142,7 @@ export const GRADER_CALIBRATION: Record<string, string> = {
 export const DEFAULT_ROLE_MODELS: RoleModels = {
   planner: { provider: "openai", model: "gpt-6.1-terra", reasoning: "low" }, // sol needed low to meet the 60 s deadline; terra not yet measured
   tutor: { provider: "openai", model: "gpt-6.1-terra" },
-  grader: { provider: "openai", model: "gpt-6.1-sol" },  // owner rule: cheapest model passing every calibration repeat (eval/CALIBRATION-openai-gpt-6.1-sol.md); "openai" = the owner's Sign in with ChatGPT login
+  grader: { provider: "openai", model: "gpt-6.1-terra", reasoning: "low" }, // owner rule: cheapest passing every calibration repeat (9/9, eval/CALIBRATION-openai-gpt-6.1-terra@low.md)
   generator: { provider: "antigravity", model: "gemini-3.8-flash" },
   feynman: { provider: "antigravity", model: "gemini-3.8-flash" },
   summarizer: { provider: "antigravity", model: "gemini-3.8-flash" },
