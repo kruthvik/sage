@@ -26,12 +26,14 @@ for (const [label, g] of runs) {
   if (!fx) { console.log(`${label}: no researcher call queued`); continue; }
   const t = Date.now();
   try {
-    const evs = await runRole(fx, s, { models, roleCall: rt.roleCall, researchCall: rt.researchCall }, 1);
+    const researchCall: typeof rt.researchCall = async i => { const r = await rt.researchCall(i);
+      console.log(`  read: ${r.searches} searches, ${r.fetches} fetches, ${r.fetched.length} chars`); return r; };
+    const evs = await runRole(fx, s, { models, roleCall: rt.roleCall, researchCall }, 1);
     for (const e of evs) apply(e.event, e.actor);
     const log = evs.map(e => e.event).filter((e): e is Extract<EngineEvent, { type: "role_call_logged" }> => e.type === "role_call_logged").at(-1);
     const p = [...s.packs.values()].at(-1);
     console.log(`\n${label} (${fx.purpose}): ${Math.round((Date.now() - t) / 1000)} s, ${log ? `${log.inputTokens} in / ${log.outputTokens} out tok, $${(log.costUsd ?? 0).toFixed(4)}` : "no log"}; pack ${p?.id ?? "none"} status=${p?.status}`);
-    for (const i of p?.items ?? []) console.log(`  - ${i.unsourced ? "[unsourced] " : ""}${i.title} <${i.url ?? i.citation ?? "-"}>\n    reliability: ${i.reliability}\n    spans: ${i.spans.length}${i.spans[0] ? ` e.g. "${i.spans[0].slice(0, 120)}"` : ""}`);
+    for (const i of p?.items ?? []) console.log(`  - ${i.unsourced ? "[unsourced] " : ""}${i.title} <${i.url ?? i.citation ?? "-"}>\n    reliability: ${i.reliability}\n    spans: ${i.spans.length} kept${i.unverifiedSpans ? `, ${i.unverifiedSpans} dropped (not on the fetched page)` : ""}${i.spans[0] ? ` e.g. "${i.spans[0].slice(0, 120)}"` : ""}`);
   } catch (e) { console.log(`\n${label}: FAILED after ${Math.round((Date.now() - t) / 1000)} s: ${(e as Error).message}`); }
 }
 process.exit(0);

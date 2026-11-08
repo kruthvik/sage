@@ -131,5 +131,7 @@ export type ResponseInput = { kind: "text"; text: string } | { kind: "choice"; i
 export interface SourcePackItem {
   id: string; title: string; url?: string; citation?: string; relevance: string; spans: string[]; reliability: string;
   nodeId?: string; conflictsWithSourceId?: string; unsourced?: boolean;
+  /** Spans the researcher gave that weren't found word for word in what it fetched (dropped; shown so the learner knows). */
+  unverifiedSpans?: number;
 }
 export interface SourcePack { id: string; trigger: "intake" | "node_uncovered" | "low_confidence" | "exam" | "tutor_request" | "video_transcript"; nodeId?: string; question?: string; items: SourcePackItem[]; status: "pending" | "accepted" | "partially_accepted" | "declined"; acceptedItemIds: string[] }

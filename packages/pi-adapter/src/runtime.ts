@@ -82,13 +82,14 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
   }
 
   // Researcher (owner reply 2): the only role with tools — pi-web-access search/fetch, hard-capped by a blocking hook.
-  let researchServices: Promise<Awaited<ReturnType<PiSdk["createAgentSessionServices"]>>> | undefined;
   let budget = { searches: 0, fetches: 0, limits: { maxSearches: 6, maxFetches: 6 } };
   let researchSystem = "";
   let queue: Promise<unknown> = Promise.resolve(); // shortcut: research calls run one at a time so the budget counter is per call; parallelise if packs queue up
-  function researchCall(input: RoleCallInput & { system: string; limits: { maxSearches: number; maxFetches: number } }): Promise<RoleCallResult & { searches: number; fetches: number }> {
+  function researchCall(input: RoleCallInput & { system: string; limits: { maxSearches: number; maxFetches: number } }): Promise<RoleCallResult & { searches: number; fetches: number; fetched: string }> {
     const run = async () => {
-      researchServices ??= sdk.createAgentSessionServices({
+      // Fresh services per call: pi-web-access keeps the ctx of the first session, so reusing services made every later call's
+      // searches fail ("extension ctx is stale after session replacement") and the researcher wrote spans from memory.
+      const researchServices = sdk.createAgentSessionServices({
         cwd: opts.paths.home, agentDir, settingsManager,
         resourceLoaderOptions: { noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
           systemPromptOverride: () => researchSystem, appendSystemPromptOverride: () => [],
@@ -124,10 +125,14 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
         const last = msgs.at(-1);
         if (!last || last.stopReason !== "stop") throw new Error(`research did not finish (${last?.stopReason ?? "no reply"})`);
         const text = submitted !== undefined ? JSON.stringify(submitted) : last.content.filter(p => p.type === "text").map(p => p.text ?? "").join("\n");
+        // Everything the researcher read (search results and fetched pages), so the host can keep only spans that are real quotes.
+        const fetched = (session.messages as { role: string; toolName?: string; content?: { type: string; text?: string }[] }[])
+          .filter(m => m.role === "toolResult" && ["web_search", "fetch_content", "get_search_content"].includes(m.toolName ?? ""))
+          .flatMap(m => (m.content ?? []).filter(p => p.type === "text").map(p => p.text ?? "")).join("\n").slice(0, 4_000_000);
         const tot = msgs.reduce((a, m) => ({ input: a.input + (m.usage?.input ?? 0), output: a.output + (m.usage?.output ?? 0),
           cost: typeof m.usage?.cost?.total === "number" && a.cost !== "unknown" ? a.cost + m.usage.cost.total : "unknown" as const }), { input: 0, output: 0, cost: 0 as number | "unknown" });
         return { text, stopReason: last.stopReason, provider: input.provider, model: input.model, ms: Date.now() - started,
-          usage: { input: tot.input, output: tot.output, costUsd: tot.cost }, searches: Math.min(budget.searches, input.limits.maxSearches), fetches: Math.min(budget.fetches, input.limits.maxFetches) };
+          usage: { input: tot.input, output: tot.output, costUsd: tot.cost }, searches: Math.min(budget.searches, input.limits.maxSearches), fetches: Math.min(budget.fetches, input.limits.maxFetches), fetched };
       } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", relay); session.dispose(); }
     };
     const p = queue.then(run, run);

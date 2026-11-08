@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { runRole, type RoleModels } from "../src/host.ts";
+import { verifySpans } from "../src/roles.ts";
 import { initialState } from "../../engine/src/state.ts";
 import type { RoleCallInput, RoleCallResult } from "../../pi-adapter/src/runtime.ts";
 
@@ -41,6 +42,23 @@ test("learner source ids reach the generator as excerpts with span ids, and the 
   const s = { ...initialState(), goal: { objective: "Pass bio", mode: "cram", pace: "normal", sourceIds: ["src_a"], preview: {} } } as never;
   await runRole({ kind: "call_role", role: "planner", purpose: "plan", input: {} }, s, { models, roleCall, researchCall: roleCall, sources }, 2).catch(() => []);
   expect(users.some(u => u.includes("Outline of the learner's sources") && u.includes("Krebs cycle"))).toBe(true);
+});
+
+test("researcher spans survive only if they're word-for-word in what it fetched", () => {
+  const item = (spans: string[]) => ({ id: "r1.1", title: "TED transcript", relevance: "the talk", reliability: "publisher", url: "https://www.ted.com/x", spans });
+  const page = "## Transcript\nGood morning. How are **you**? It's been great, hasn’t it? I&apos;ve been [blown away](https://x) by the whole thing. Assets equal the owners’ equity—like it or not.";
+  const [v] = verifySpans([item([
+    "It's been great, hasn't it?",                                   // curly vs straight apostrophe
+    "Good morning. How are you? ... I've been blown away by the whole thing", // ellipsis skip + markdown stripped
+    "Introduction to the talk and its main argument about schools",  // a summary, not on the page
+    "short",                                                         // too short to count as a quote
+    "Assets equal the owners' equity - like it or not",              // em dash and curly apostrophe on the page
+    "Assets equal the owner equity",                             // different words: dropped
+  ])], page);
+  expect(v!.spans).toHaveLength(3);
+  expect(v!.unverifiedSpans).toBe(3);
+  expect(verifySpans([item(["anything at all here"])], undefined)[0]!.spans).toHaveLength(1); // no fetched text: unchanged
+  expect(verifySpans([item(["blown away by the whole thing ... Good morning"])], page)[0]!.spans).toHaveLength(0); // pieces out of order
 });
 
 test("diagnostic, top-up and replacement generation get the same excerpts as the node bank", async () => {

@@ -7,7 +7,7 @@ import { GRADER_SYSTEM, GRADE_OUTPUT, graderUser, parseGrade } from "./grader.ts
 import { validateGrade } from "../../engine/src/evidence.ts";
 import { DIGEST_TOKENS } from "../../engine/src/pedagogy.config.ts";
 import { CHECKER_SYSTEM, KEY_DISPUTE_SYSTEM, checkable, checkerUser, compareKey, keyDisputeUser, parseChecker, parseKeyDispute } from "./keycheck.ts";
-import { PLANNER_SYSTEM, plannerUser, parsePlan, GENERATOR_SYSTEM, generatorUser, parseItems, SUMMARIZER_SYSTEM, summarizerUser, parseSummary, researcherSystem, researcherUser, parsePack, TRANSCRIBER_SYSTEM, transcriberUser, parseTranscription } from "./roles.ts";
+import { PLANNER_SYSTEM, plannerUser, parsePlan, GENERATOR_SYSTEM, generatorUser, parseItems, SUMMARIZER_SYSTEM, summarizerUser, parseSummary, researcherSystem, researcherUser, parsePack, verifySpans, TRANSCRIBER_SYSTEM, transcriberUser, parseTranscription } from "./roles.ts";
 
 export type RoleName = "planner" | "tutor" | "grader" | "generator" | "feynman" | "summarizer" | "researcher" | "checker" | "transcriber";
 export interface RoleModel { provider: string; model: string; reasoning?: RoleCallInput["reasoning"] }
@@ -15,7 +15,8 @@ export type RoleModels = Record<RoleName, RoleModel>;
 export interface HostDeps {
   models: RoleModels;
   roleCall(i: RoleCallInput): Promise<RoleCallResult>;
-  researchCall(i: RoleCallInput & { limits: { maxSearches: number; maxFetches: number } }): Promise<RoleCallResult>;
+  /** `fetched`: the text of the pages and search results the researcher read (absent ⇒ spans can't be checked). */
+  researchCall(i: RoleCallInput & { limits: { maxSearches: number; maxFetches: number } }): Promise<RoleCallResult & { fetched?: string }>;
   signal?: AbortSignal;
   /** Stored learner photos by hash (scrap_work); absent ⇒ the transcriber role is unavailable. */
   readImage?: (hash: string) => { data: string; mimeType: string };
@@ -33,13 +34,13 @@ const BANK_SPLIT: [Partition, number][] = [["teaching", 3], ["practice", 5], ["a
 export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq: number): Promise<HostEvent[]> {
   const out: HostEvent[] = [];
   /** One call, logged; one retry when the reply doesn't parse (malformed JSON is the common failure, not a judgement). */
-  const call = async <T>(role: RoleName, system: string, user: string, parse: (text: string) => T, research?: { maxSearches: number; maxFetches: number }, output?: RoleCallInput["output"], images?: RoleCallInput["images"]): Promise<T> => {
+  const call = async <T>(role: RoleName, system: string, user: string, parse: (text: string, r: RoleCallResult & { fetched?: string }) => T, research?: { maxSearches: number; maxFetches: number }, output?: RoleCallInput["output"], images?: RoleCallInput["images"]): Promise<T> => {
     const m = deps.models[role];
     for (let attempt = 0; ; attempt++) {
       const req = { provider: m.provider, model: m.model, system, user, ...(output ? { output } : {}), ...(images ? { images } : {}), ...(m.reasoning ? { reasoning: m.reasoning } : {}), ...(deps.signal ? { signal: deps.signal } : {}) };
       const r = research ? await deps.researchCall({ ...req, limits: research }) : await deps.roleCall(req);
       out.push({ actor: "host", event: { type: "role_call_logged", role, inputTokens: r.usage.input, outputTokens: r.usage.output, ...(r.usage.costUsd === "unknown" ? {} : { costUsd: r.usage.costUsd }) } });
-      try { return parse(r.text); } catch (e) {
+      try { return parse(r.text, r); } catch (e) {
         if (attempt >= 1) throw e;
         // The retry says what was wrong (flash repeated the same unquoted criteria when simply asked again).
         user += `\n\nYour previous reply was rejected: ${(e as Error).message.slice(0, 400)}. Fix exactly that and reply again with JSON only. Every quote must be copied word for word from the learner's response.`;
@@ -144,7 +145,7 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
     case "researcher": {
       const limits = fx.input.limits as { maxSearches: number; maxFetches: number };
       const items = await call("researcher", researcherSystem(limits), researcherUser({ ...fx.input, limits: undefined, plan: s.plan ? s.plan.nodes.map(n => ({ id: n.id, title: n.title })) : undefined }),
-        t => parsePack(t, pfx), limits);
+        (t, r) => verifySpans(parsePack(t, pfx), r.fetched), limits);
       const nodeId = (fx.input.node as PlanNode | undefined)?.id ?? (fx.input.nodeId as string | undefined);
       out.push({ actor: "role", event: { type: "research_pack_received", pack: { id: pfx, trigger: fx.purpose as never, items,
         ...(nodeId ? { nodeId } : {}), ...(typeof fx.input.question === "string" ? { question: fx.input.question } : {}) } } });

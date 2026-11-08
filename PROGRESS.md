@@ -115,7 +115,12 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
   - YouTube publisher-transcript trigger, using a TED talk: 48 s, 110k tokens in, $0.014. It returned one item, the official `ted.com/…/transcript`, rated as the publisher's primary source, with verbatim opening lines as spans. YouTube and transcript farms were ignored.
   - Intake for accounting basics: 27 s, $0.003. Five credible sources (AccountingCoach ×2, OpenStax, Investopedia, CFI), every one with a URL.
   - Both packs stay pending until the learner accepts them.
-  - **Finding:** the intake spans were summaries, not the short exact quotes the prompt asks for. Nothing checks spans against the fetched page yet.
+  - **Finding:** the intake spans were summaries, not the short exact quotes the prompt asks for.
+  - **Fixed (spans are now verified):** the runtime returns everything the researcher read (search results and fetched pages). `verifySpans` keeps only spans found word for word in it. It compares words only, ignoring punctuation, quote and dash styles, HTML entities and Markdown. "..." skips text, and the pieces must appear in order. Dropped spans are counted on the item as `unverifiedSpans`.
+  - Two causes of the summaries were found and fixed:
+    - **Stale extension context.** Reusing research services across calls made every later call's tools fail ("extension ctx is stale"), so the model wrote spans from memory. Services are now created per call.
+    - **Truncated snippets.** Search snippets stop at about 500 characters, and the model finished the sentences itself. The prompt now says to fetch the page before quoting past a snippet.
+  - Rerun on 2026-11-08: TED 2/2 spans kept. Intake: 4 sources, 20/20 spans kept, 5 searches and 6 fetches, $0.023, 99 s.
 - **Flash as grader:** fails the A1–A10 gate at default reasoning (MAE 8.8) and at medium (MAE 8.7, signed −0.5). The misses are the same two anchors both times: A7 (target 55, flash 25) and A8 (target 65, flash 88). sol passes (MAE 5.5). High reasoning was started but stopped unfinished.
 
 ### M4: what exists (2026-11-08)
@@ -228,9 +233,9 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. Researcher spans: check each span against the text the researcher actually fetched, and drop or flag paraphrases, so a citation is a quote.
-2. The real Cram session waits until there's a GUI (owner 2026-11-08: the dev console is too hard to use, and no GUI yet).
-3. The remaining eval notes: flash grader JSON failures after retry, and ww1 long-form passes nothing.
+1. The remaining eval notes: flash grader JSON failures after retry, and ww1 long-form passes nothing.
+2. The tutor's services are also reused across turns. Check it doesn't hit the same stale extension context. It has no extension tools active, so it's probably fine.
+3. The real Cram session waits until there's a GUI (owner 2026-11-08: the dev console is too hard to use, and no GUI yet).
 
 ## Commands
 
