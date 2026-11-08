@@ -11,6 +11,7 @@ import { DEFAULT_ROLE_MODELS, GRADER_CALIBRATION, type RoleModels } from "../../
 import { buildPacket } from "../../../packages/agent/src/packet.ts";
 import { EngineError, replay } from "../../../packages/engine/src/loop.ts";
 import { usedMin } from "../../../packages/engine/src/pacing.ts";
+import { IMAGE_LIMITS, putImage } from "../../../packages/storage/src/blobs.ts";
 import type { EngineEvent } from "../../../packages/engine/src/state.ts";
 import type { Goal, ResponseInput } from "../../../packages/core/src/types.ts";
 import type { SagePaths } from "../../../packages/pi-adapter/src/sdk.ts";
@@ -39,7 +40,7 @@ export function startServer(opts: ServeOptions) {
   const writeJson = (f: string, v: unknown) => { mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, JSON.stringify(v, null, 2)); };
   const readSettings = (): { roleModels?: Partial<RoleModels>; exportFontPath?: string } => { try { return JSON.parse(readFileSync(settingsFile, "utf8")); } catch { return {}; } };
   const readModels = (): RoleModels => ({ ...DEFAULT_ROLE_MODELS, ...readSettings().roleModels });
-  const wire = (d: SessionDriver) => { d.exportsHome = opts.paths.home; d.exportFontPath = readSettings().exportFontPath; return d; };
+  const wire = (d: SessionDriver) => { d.exportsHome = opts.paths.home; d.exportFontPath = readSettings().exportFontPath; d.blobsDir = join(opts.paths.home, "data", "blobs"); return d; };
   const drivers = new Map<string, SessionDriver>();
   const leases = new Map<string, string>(); // sessionId → conn id
   const sockets = new Map<string, ServerWebSocket<Conn>>();
@@ -123,6 +124,21 @@ export function startServer(opts: ServeOptions) {
         for (const d of drivers.values()) { d.models = next; d.exportFontPath = exportFontPath; }
         return { roleModels: next, exportFontPath: exportFontPath ?? null };
       }
+      case "image.consent": {
+        const imgs = p.images as { dataBase64: string }[];
+        if (!imgs.length || imgs.length > IMAGE_LIMITS.maxImages) throw new RpcError(ERR.params, `send 1–${IMAGE_LIMITS.maxImages} photos`);
+        const d = driver(id!), bytes = imgs.map(i => Buffer.from(i.dataBase64, "base64"));
+        if (bytes.reduce((n, b) => n + b.length, 0) > 12 * 1024 * 1024) throw new RpcError(ERR.params, "photos must total 12 MB or less");
+        let hashes: string[];
+        try { hashes = bytes.map(b => putImage(d.blobsDir!, b).hash); } catch (e) { throw new RpcError(ERR.params, (e as Error).message); }
+        const m = d.models.transcriber;
+        return act({ type: "image_consented", blobHashes: hashes, provider: m.provider, model: m.model });
+      }
+      case "transcription.confirm": {
+        const d = driver(id!), cur = d.state.current;
+        const latencyMs = typeof p.latencyMs === "number" ? p.latencyMs : cur ? Date.now() - Date.parse(cur.presentedAt) : 0;
+        return act({ type: "transcription_confirmed", text: p.text as string, responseEventId: randomUUID(), latencyMs: Math.max(0, latencyMs) });
+      }
       case "usage.get": {
         if (id) return driver(id).state.spend;
         if (!usageOn()) return { enabled: false };
@@ -150,6 +166,7 @@ export function startServer(opts: ServeOptions) {
       return new Response("not found", { status: 404 });
     },
     websocket: {
+      maxPayloadLength: 24 * 1024 * 1024, // photo intake: ≤ 12 MB of images as base64 plus JSON
       open(ws) { sockets.set(ws.data.id, ws); },
       close(ws) { sockets.delete(ws.data.id); for (const [s, h] of leases) if (h === ws.data.id) leases.delete(s); },
       async message(ws, raw): Promise<void> {

@@ -46,7 +46,9 @@ function show(ev,d){const st=$('stage');const box=h=>{const div=document.createE
    :t==='matching'?(it.choices||[]).map(c=>'<label class="slot">'+esc(c)+' → <select class="seq">'+opts(it.targets||[])+'</select></label>').join('')
    :(it.choices||[]).map((c,i)=>'<button class="choice" onclick="choose('+i+')">'+esc(c)+'</button>').join('');
   const cases=(it.cases||[]).length?'<div class="cases">'+it.cases.map((c,i)=>'<div><b>Case '+'AB'[i]+'</b><p>'+esc(c)+'</p></div>').join('')+'</div>':'';
-  box('<b>'+esc(t)+'</b>'+(d.cueText?'<p><i>'+esc(d.cueText)+'</i></p>':'')+'<p>'+esc(it.stem)+'</p>'+cases+body+(slots?'<p><button class="primary" onclick="seq(this)">Submit</button></p>':''))}
+  box('<b>'+esc(t)+'</b>'+(d.cueText?'<p><i>'+esc(d.cueText)+'</i></p>':'')+'<p>'+esc(it.stem)+'</p>'+cases+body+(slots?'<p><button class="primary" onclick="seq(this)">Submit</button></p>':'')
+   +(t==='scrap_work'?'<p><label>Photo of your working <input type="file" class="photo" accept="image/png,image/jpeg,image/webp" multiple></label> <button onclick="photo(this)">Send photo</button> <span class="mute">or type your working below</span></p>':''))}
+ if(ev==='transcription.review')box('<b>Check the transcription</b><p>Fix anything that was misread. Only the text you confirm is graded.</p><textarea class="tr" rows="8" aria-label="Transcription of your working">'+esc(d.text)+'</textarea><p><button class="primary" onclick="confirmTr(this)">Confirm and submit</button></p>');
  if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>')}
  if(ev==='repair.required')box('<b>Fix this first</b><ul>'+d.flaws.map(f=>'<li>"'+esc(f.quote)+'": '+esc(f.problem)+'</li>').join('')+'</ul>');
  if(ev==='hint.reveal')box('<b>Hint</b><p>'+esc(d.text)+'</p>');
@@ -59,10 +61,16 @@ async function resume(id){if(!id)return;sid=id;await rpc('session.resume',{sessi
 const submit=()=>{call('item.submit',{text:$('resp').value});$('resp').value='';$('answer').hidden=true};
 const choose=i=>{call('item.submit',{choice:i});$('answer').hidden=true};
 const seq=b=>{const v=[...b.closest('div').querySelectorAll('select.seq')].map(s=>s.value);if(v.some(x=>x===''))return log('Choose an option in every slot first.','err');b.disabled=true;call('item.submit',{indices:v.map(Number)})};
+let tmodel='the transcriber model';
+const photo=async b=>{const files=[...b.parentElement.querySelector('input.photo').files];if(!files.length)return log('Choose a photo first.','err');
+ if(!confirm('Send '+files.length+' photo(s) to '+tmodel+' to read your working? Only the photos go; you check the text before it is graded.'))return;
+ const b64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
+ b.disabled=true;call('image.consent',{images:await Promise.all(files.map(async f=>({dataBase64:await b64(f)})))}).then(v=>v&&log('Reading your working…'))};
+const confirmTr=b=>{const t=b.closest('div').querySelector('textarea.tr').value;if(!t.trim())return log('The transcription is empty.','err');b.disabled=true;call('transcription.confirm',{text:t});$('answer').hidden=true};
 const ack=()=>feedback&&call('feedback.ack',{attemptId:feedback}).then(()=>feedback=null);
 const state=()=>call('state.get');
 const exp=()=>call('export.get').then(v=>v&&log('Exported to '+v.dir+(v.userEdited.length?' (kept your edits: '+v.userEdited.join(', ')+')':'')+'\\n\\n'+v.sessionMd.slice(0,6000)));
-ws.addEventListener('open',()=>rpc('usage.get',{}).then(v=>{$('usage').checked=v.enabled!==false}).catch(()=>{}));
+ws.addEventListener('open',()=>{rpc('usage.get',{}).then(v=>{$('usage').checked=v.enabled!==false}).catch(()=>{});rpc('settings.get',{}).then(v=>{const m=v.roleModels.transcriber;if(m)tmodel=m.provider+'/'+m.model}).catch(()=>{})});
 const extend=()=>call('time.extend',{minutes:fit.estMin-fit.budgetMin}),speed=()=>call('pace.set',{pace:'speed_up'});
 async function merge(){for(const g of fit.mergeGroups)await call('plan.merge',{nodeIds:g})}
 function dispute(){if(!lastAttempt)return log('nothing to dispute','err');const a=prompt('Why is the grade or answer key wrong?');if(a)call('grade.dispute',{attemptId:lastAttempt,argument:a})}

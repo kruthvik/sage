@@ -93,7 +93,7 @@ export function itemsMd(s: EngineState, n: PlanNode): string {
   return [`# Items: ${cell(n.title)}`, "", ...rows.flatMap((a, i) => {
     const it = s.items.get(a.itemId)!;
     const flaws = a.grade?.flaws.filter(f => f.severity !== "polish") ?? [];
-    return [`## ${i + 1}. ${it.activityType} · ${a.grade ? `${a.grade.score0to100}` : "ungraded"}${a.independent ? "" : " · assisted"}${a.isRepair ? " · repair" : ""}${a.check ? ` · ${a.check}` : ""}`, "",
+    return [`## ${i + 1}. ${it.activityType} · ${a.grade ? `${a.grade.score0to100}` : "ungraded"}${a.independent ? "" : " · assisted"}${a.isRepair ? " · repair" : ""}${a.fromImages ? " · from your photo (transcription you confirmed)" : ""}${a.check ? ` · ${a.check}` : ""}`, "",
       `**Question:** ${cell(it.stem)}`, "", ...(it.cases ? [...it.cases.map((c, j) => `- Case ${"AB"[j]}: ${cell(c)}`), ""] : []),
       // Choice/ordering/matching responses are stored as indices; the deterministic grade quotes them in words.
       `**Your answer:** ${quote(a.grade?.grader === "deterministic" && /^(choice|indices) /.test(a.response) ? a.grade.criterionEvidence[0]?.quote ?? a.response : a.response)}`, "",

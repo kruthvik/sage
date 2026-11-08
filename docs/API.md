@@ -6,7 +6,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 **Authority:** learner methods map to engine events whose emitter is `learner` in `EVENT_ACTOR` (`packages/engine/src/state.ts`), and the driver refuses anything else from a client. The model can never author learner responses, consent, approvals or source acceptance.
 **Lease:** one client drives a session at a time. `session.create` takes the lease, `session.resume { takeLease: true }` takes it over, and closing the socket releases it. Read methods work without the lease.
 **Errors:** `-32700` parse · `-32600` invalid request · `-32601` unknown method · `-32602` invalid params (message lists every problem) · `1001` engine rejected (message is the engine's reason) · `1002` lease held elsewhere · `1003` reserved, not implemented yet · `1004` unknown session.
-**Events** arrive as `{"jsonrpc":"2.0","method":"event","params":{event, sessionId, data}}` to every client attached to the session: `tutor.done`, `item.present`, `grade.result`, `feedback.present`, `repair.required`, `hint.reveal`, `gate.update`, `node.status`, `pace.notice`, `confirm.required`, `plan.changed`, `plan.fit`, `notice`, `research.started`, `research.ready`, `cost.update`, `export.ready`, `checkpoint`, `error`, `dev.item_rejected`. An `error` event with `data.retry: true` means the session is waiting on a failed role call or tutor turn: call `session.retry`.
+**Events** arrive as `{"jsonrpc":"2.0","method":"event","params":{event, sessionId, data}}` to every client attached to the session: `tutor.done`, `item.present`, `grade.result`, `feedback.present`, `repair.required`, `hint.reveal`, `gate.update`, `node.status`, `pace.notice`, `confirm.required`, `plan.changed`, `plan.fit`, `notice`, `research.started`, `research.ready`, `cost.update`, `export.ready`, `checkpoint`, `error`, `dev.item_rejected`, `transcription.review` ({itemId, text}: show it editable; nothing is graded until `transcription.confirm`). An `error` event with `data.retry: true` means the session is waiting on a failed role call or tutor turn: call `session.retry`.
 
 ## Methods (implemented)
 
@@ -50,8 +50,8 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | Method | Params | Kind | Note |
 |---|---|---|---|
 | `turn.send` | sessionId, text | learner (lease) | free-text turn to the tutor (needs an engine event) |
-| `image.consent` | sessionId | learner (lease) | M5 |
-| `transcription.confirm` | sessionId | learner (lease) | M5 |
+| `image.consent` | sessionId, images: [{dataBase64}] | learner (lease) | scrap_work photos. Calling it **is** the learner's per-message consent to send these photos to the transcriber model (default flash), so the client must name the model and ask first. 1–4 PNG/JPEG/WebP (checked from the bytes), ≤ 5 MB each, ≤ 12 MB total; stored locally in `data/blobs/`. Emits `transcription.review`. |
+| `transcription.confirm` | sessionId, text, latencyMs? | learner (lease) | The learner's checked (optionally edited) transcription. It becomes their response and is graded; the attempt records which photos it came from. |
 | `export.get` | sessionId | read | regenerates the session folder (`SAGE_HOME/sessions/<date>-<topic>/`) from the ledger; returns `{dir, written, unchanged, userEdited, pdfs, errors, sessionMd}`. Files the learner edited are never overwritten (listed in `userEdited`). |
 | `sources.add` | — | learner (lease) | M6 |
 | `sources.preview` | — | read | M6 |

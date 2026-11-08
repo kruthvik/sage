@@ -15,7 +15,9 @@ export interface SageRuntimeOptions {
 
 export interface RoleCallInput { provider: string; model: string; system: string; user: string; maxTokens?: number; timeoutMs?: number; signal?: AbortSignal; /** Provider-neutral reasoning level; omitted ⇒ provider default (the grader was calibrated with the default). */ reasoning?: "minimal" | "low" | "medium" | "high";
   /** Structured output: the model must answer by calling this one tool; its arguments come back as `text` (JSON). Providers that ignore the forced choice may still answer in text. */
-  output?: { name: string; description: string; schema: Record<string, unknown> } }
+  output?: { name: string; description: string; schema: Record<string, unknown> };
+  /** Images sent with the user message (scrap_work photos, only after the learner's per-message consent). */
+  images?: { data: string; mimeType: string }[] }
 export interface RoleCallResult { text: string; stopReason: string; usage: { input: number; output: number; cached?: number; costUsd: number | "unknown" }; provider: string; model: string; ms: number }
 
 /** Structural copy of sage-extension's SageTool, bound to a bridge (pi-adapter never imports Sage packages above core). */
@@ -51,6 +53,7 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
     if (input.user.length + input.system.length > ROLE_MAX_INPUT_CHARS) throw new Error(`role input exceeds ${ROLE_MAX_INPUT_CHARS} chars`);
     const model = models.getModel(input.provider, input.model);
     if (!model) throw new Error(`model ${input.provider}/${input.model} is not available; check settings or auth`);
+    if (input.images?.length && (model as { input?: string[] }).input && !(model as { input: string[] }).input.includes("image")) throw new Error(`model ${input.provider}/${input.model} can't read images; choose a vision model for the transcriber role`);
     const controller = new AbortController();
     const relay = () => controller.abort(input.signal?.reason);
     input.signal?.addEventListener("abort", relay, { once: true });
@@ -58,7 +61,7 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
     const started = Date.now();
     try {
       const out = input.output;
-      const ctx = { systemPrompt: input.system, messages: [{ role: "user" as const, content: input.user, timestamp: started }],
+      const ctx = { systemPrompt: input.system, messages: [{ role: "user" as const, content: input.images?.length ? [{ type: "text" as const, text: input.user }, ...input.images.map(i => ({ type: "image" as const, data: i.data, mimeType: i.mimeType }))] : input.user, timestamp: started }],
         ...(out ? { tools: [{ name: out.name, description: out.description, parameters: out.schema }] } : {}) };
       // "required" is what antigravity maps to Gemini's forced function call (mode ANY); pi's own type only lists auto/none.
       // A stable key per system prompt lets the provider reuse its prompt cache across one-shot role calls (cached input bills at ~10%).

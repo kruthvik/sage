@@ -19,7 +19,7 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 | M2 Agent layer ◆ | **done**; owner chose role defaults (sol: planner/tutor/grader; flash: generator/feynman/summarizer/researcher) | `bun test` 63 pass · grader A1–A10 PASS on sol · commits `4c1339e`…`a25f576` |
 | M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
 | M4 Exports | **done** (PDF maths font question open; see M4 below) | `bun test` 94 pass · `tsc` clean |
-| M5 Activities ◆ | not started | |
+| M5 Activities ◆ | **done** (owner batch answered 2026-11-08) | `bun test` 102 pass · `tsc` clean · live flash vision probe |
 | M6 Integrations | not started | |
 
 M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechanisms, 27 engineering defaults), `docs/DESIGN.md`, `docs/LIBRARY_CANDIDATES.md`.
@@ -125,6 +125,21 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - API: `export.get` (writes, then returns the result and `session.md`); `usage.set {enabled}` and `usage.get` totals `{sessions, hours, calls}`. These are local counters from the ledger, on by default, and nothing is uploaded. The dev console has an Export button and a Usage counters checkbox.
 - **Finding (pdf-lib vs Typst):** the built-in Helvetica can't show maths symbols. The worker writes the common ones as ASCII (∫ → "integral", ≤ → "<=", π → "pi"). Anything else prints as "?", with a notice on the page; the Markdown keeps the exact text. Real maths typesetting needs Typst or an embedded Unicode font, either one a new dependency (owner ask).
 
+### M5: what exists (2026-11-08)
+- **Library activities**:
+  - `ordering` (key `{kind:"order"}`) and `matching` (`targets` plus key `{kind:"match"}`) are graded in code. The score is the share right, and only a fully right answer passes.
+  - `contrasting_cases` (two `cases` plus a rubric) goes to the grader, which now sees the cases.
+  - The validator rejects bad columns and keys, and an ordering shown in its answer order.
+  - All three render natively in the dev console (labelled selects, side-by-side cases).
+  - Evidence mapping (flag if wrong): ordering and matching count as recall/acquisition only; contrasting cases count as explanation/selection.
+- **scrap_work photos**:
+  - `image.consent` stores 1–4 PNG/JPEG/WebP files (type checked from the bytes) in `data/blobs/`, and records the consent with the model name in the timeline.
+  - The **transcriber** role (flash) proposes a transcription, which is shown with `transcription.review`.
+  - `transcription.confirm` takes the learner's checked or edited text, and that text is what gets graded. The attempt records `fromImages`.
+  - Only the learner can consent or confirm; the reducer enforces it by actor. The console names the model and asks before sending.
+  - Live probe (`packages/eval/experiments/vision-probe.ts`): flash transcribed a 3-line working exactly and kept the learner's sign error. Cost $0.0002, 3.5 s.
+- Not built (owner M5): plot/param sims, labeling/concept maps, the `---js` module and the DSL port.
+
 ## Research findings worth knowing
 
 - Nothing in `outputs/` contradicts a spec mechanism.
@@ -176,7 +191,7 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
 2. **Owner:** M4 PDF maths: keep pdf-lib with ASCII spellings, embed a Unicode TTF you supply, or add Typst (new dependency).
-3. M5 Activities ◆: stop for the owner's questions before building.
+3. M6 Integrations: Obsidian, video ingest, sources/PDF extraction, Ollama embeddings. Large or networked deps need your OK; questions come first.
 
 ## Commands
 

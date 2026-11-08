@@ -1,12 +1,14 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { startServer, ERR } from "../src/server.ts";
 import { sagePaths } from "../../../packages/core/src/paths.ts";
 import { fakeRuntime } from "../../../packages/eval/src/fake-runtime.ts";
 
-const srv = startServer({ paths: sagePaths(await mkdtemp(join(tmpdir(), "sage-home-"))), rt: fakeRuntime() });
+const home = await mkdtemp(join(tmpdir(), "sage-home-"));
+const srv = startServer({ paths: sagePaths(home), rt: fakeRuntime() });
 afterAll(() => srv.stop());
 
 function client() {
@@ -64,4 +66,24 @@ test("usage counters are local, on by default, and can be switched off", async (
   expect((await c.rpc("usage.set", { enabled: "no" })).error?.code).toBe(ERR.params);
   await c.rpc("usage.set", { enabled: true });
   c.ws.close();
+});
+
+test("scrap_work photo: consent stores it, the transcriber proposes text, only the learner's confirmed text is graded", async () => {
+  const a = client(); await a.open;
+  const sessionId = (await a.rpc("session.create", { goal: { objective: "Solve quadratics", timeBudgetMin: 30 } })).result.sessionId as string;
+  await a.until(() => a.events.some(e => e.event === "plan.changed"));
+  await a.rpc("plan.approve", { sessionId });
+  await a.until(() => a.events.some(e => e.event === "item.present"));
+  expect((await a.rpc("transcription.confirm", { sessionId, text: "x = 2" })).error?.code).toBe(ERR.engine); // nothing to confirm yet
+  expect((await a.rpc("image.consent", { sessionId, images: [{ dataBase64: Buffer.from("not an image at all, just text").toString("base64") }] })).error?.code).toBe(ERR.params);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 7)]);
+  expect((await a.rpc("image.consent", { sessionId, images: [{ dataBase64: png.toString("base64") }] })).error).toBeUndefined();
+  await a.until(() => a.events.some(e => e.event === "transcription.review"));
+  expect((a.events.find(e => e.event === "transcription.review")!.data as { text: string }).text).toBe("x^2 + 2x = 8 (from 1 photo)");
+  const hash = new Bun.CryptoHasher("sha256").update(png).digest("hex");
+  expect(existsSync(join(home, "data", "blobs", `${hash}.png`))).toBe(true);
+  expect((await a.rpc("transcription.confirm", { sessionId, text: "x^2 + 2x = 8, so x = 2" })).error).toBeUndefined();
+  const st = (await a.rpc("state.get", { sessionId })).result as { timeline: { kind: string; text: string }[] };
+  expect(st.timeline.some(t => t.kind === "consent" && t.text.includes("antigravity/gemini-3.8-flash"))).toBe(true);
+  a.ws.close();
 });

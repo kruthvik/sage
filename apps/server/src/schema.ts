@@ -49,8 +49,10 @@ export const METHODS: Record<string, MethodSpec> = {
   "usage.get": { params: obj({ sessionId: str }) },
   // Reserved in v1, implemented in later milestones.
   "turn.send": { params: obj({ ...sid, text: str }, ["sessionId", "text"]), learner: true, impl: false, note: "free-text turn to the tutor (needs an engine event)" },
-  "image.consent": { params: obj({ ...sid }, ["sessionId"]), learner: true, impl: false, note: "M5" },
-  "transcription.confirm": { params: obj({ ...sid }, ["sessionId"]), learner: true, impl: false, note: "M5" },
+  "image.consent": { params: obj({ ...sid, images: { type: "array", items: obj({ dataBase64: { type: "string", minLength: 16, maxLength: 7_000_000 } }, ["dataBase64"]) } }, ["sessionId", "images"]), learner: true,
+    note: "calling it IS the learner's consent to send these photos to the transcriber model (shown first in the client); 1–4 PNG/JPEG/WebP, ≤ 5 MB each, ≤ 12 MB total" },
+  "transcription.confirm": { params: obj({ ...sid, text: { type: "string", minLength: 1, maxLength: 24000 }, latencyMs: { type: "number", minimum: 0 } }, ["sessionId", "text"]), learner: true,
+    note: "the learner's checked (optionally edited) transcription; it becomes their response and is graded" },
   "export.get": { params: obj({ ...sid }, ["sessionId"]) },
   "sources.add": { params: obj({}), learner: true, impl: false, note: "M6" }, "sources.preview": { params: obj({}), impl: false, note: "M6" },
   "sources.accept": { params: obj({}), learner: true, impl: false, note: "M6" }, "sources.remove": { params: obj({}), learner: true, impl: false, note: "M6" },
@@ -62,7 +64,7 @@ export const METHODS: Record<string, MethodSpec> = {
 };
 
 export const EVENTS = ["tutor.done", "item.present", "grade.result", "feedback.present", "repair.required", "hint.reveal", "gate.update", "node.status", "pace.notice",
-  "confirm.required", "plan.changed", "plan.fit", "notice", "research.started", "research.ready", "cost.update", "export.ready", "checkpoint", "error", "dev.item_rejected"] as const;
+  "confirm.required", "plan.changed", "plan.fit", "notice", "research.started", "research.ready", "cost.update", "export.ready", "checkpoint", "error", "dev.item_rejected", "transcription.review"] as const;
 
 /** Minimal JSON Schema check for the subset used above (type, enum, required, additionalProperties:false, min/max, items). */
 export function check(schema: Schema, v: unknown, path = "params"): string[] {

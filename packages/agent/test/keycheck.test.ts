@@ -28,7 +28,7 @@ test("the solver's expression beats its own number; disagreement and ambiguity a
 
 test("a wrong key is regenerated once; a replacement that still disagrees is dropped", async () => {
   const M = { provider: "p", model: "m" };
-  const models: RoleModels = { planner: M, tutor: M, grader: M, generator: M, feynman: M, summarizer: M, researcher: M, checker: M };
+  const models: RoleModels = { planner: M, tutor: M, grader: M, generator: M, feynman: M, summarizer: M, researcher: M, checker: M, transcriber: M };
   const reply = (text: string): RoleCallResult => ({ text, stopReason: "stop", provider: "p", model: "m", ms: 1, usage: { input: 1, output: 1, costUsd: "unknown" } });
   const q = (id: string, value: number, stem: string) => ({ id, subskillIds: ["s1"], activityType: "apply_problem", partition: "practice", familyId: id, evidences: ["execution"], stem, key: { kind: "numeric", value, tolerance: 0 } });
   let gens = 0;

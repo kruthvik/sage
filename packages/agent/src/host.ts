@@ -7,9 +7,9 @@ import { GRADER_SYSTEM, GRADE_OUTPUT, graderUser, parseGrade } from "./grader.ts
 import { validateGrade } from "../../engine/src/evidence.ts";
 import { DIGEST_TOKENS } from "../../engine/src/pedagogy.config.ts";
 import { CHECKER_SYSTEM, KEY_DISPUTE_SYSTEM, checkable, checkerUser, compareKey, keyDisputeUser, parseChecker, parseKeyDispute } from "./keycheck.ts";
-import { PLANNER_SYSTEM, plannerUser, parsePlan, GENERATOR_SYSTEM, generatorUser, parseItems, SUMMARIZER_SYSTEM, summarizerUser, parseSummary, researcherSystem, researcherUser, parsePack } from "./roles.ts";
+import { PLANNER_SYSTEM, plannerUser, parsePlan, GENERATOR_SYSTEM, generatorUser, parseItems, SUMMARIZER_SYSTEM, summarizerUser, parseSummary, researcherSystem, researcherUser, parsePack, TRANSCRIBER_SYSTEM, transcriberUser, parseTranscription } from "./roles.ts";
 
-export type RoleName = "planner" | "tutor" | "grader" | "generator" | "feynman" | "summarizer" | "researcher" | "checker";
+export type RoleName = "planner" | "tutor" | "grader" | "generator" | "feynman" | "summarizer" | "researcher" | "checker" | "transcriber";
 export interface RoleModel { provider: string; model: string; reasoning?: RoleCallInput["reasoning"] }
 export type RoleModels = Record<RoleName, RoleModel>;
 export interface HostDeps {
@@ -17,6 +17,8 @@ export interface HostDeps {
   roleCall(i: RoleCallInput): Promise<RoleCallResult>;
   researchCall(i: RoleCallInput & { limits: { maxSearches: number; maxFetches: number } }): Promise<RoleCallResult>;
   signal?: AbortSignal;
+  /** Stored learner photos by hash (scrap_work); absent ⇒ the transcriber role is unavailable. */
+  readImage?: (hash: string) => { data: string; mimeType: string };
 }
 export interface HostEvent { event: EngineEvent; actor: "role" | "host" }
 type CallRole = Extract<Effect, { kind: "call_role" }>;
@@ -27,10 +29,10 @@ const BANK_SPLIT: [Partition, number][] = [["teaching", 3], ["practice", 5], ["a
 export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq: number): Promise<HostEvent[]> {
   const out: HostEvent[] = [];
   /** One call, logged; one retry when the reply doesn't parse (malformed JSON is the common failure, not a judgement). */
-  const call = async <T>(role: RoleName, system: string, user: string, parse: (text: string) => T, research?: { maxSearches: number; maxFetches: number }, output?: RoleCallInput["output"]): Promise<T> => {
+  const call = async <T>(role: RoleName, system: string, user: string, parse: (text: string) => T, research?: { maxSearches: number; maxFetches: number }, output?: RoleCallInput["output"], images?: RoleCallInput["images"]): Promise<T> => {
     const m = deps.models[role];
     for (let attempt = 0; ; attempt++) {
-      const req = { provider: m.provider, model: m.model, system, user, ...(output ? { output } : {}), ...(m.reasoning ? { reasoning: m.reasoning } : {}), ...(deps.signal ? { signal: deps.signal } : {}) };
+      const req = { provider: m.provider, model: m.model, system, user, ...(output ? { output } : {}), ...(images ? { images } : {}), ...(m.reasoning ? { reasoning: m.reasoning } : {}), ...(deps.signal ? { signal: deps.signal } : {}) };
       const r = research ? await deps.researchCall({ ...req, limits: research }) : await deps.roleCall(req);
       out.push({ actor: "host", event: { type: "role_call_logged", role, inputTokens: r.usage.input, outputTokens: r.usage.output, ...(r.usage.costUsd === "unknown" ? {} : { costUsd: r.usage.costUsd }) } });
       try { return parse(r.text); } catch (e) {
@@ -117,6 +119,13 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
       out.push({ actor: "role", event: { type: "digest_written", nodeId: n.id, digest, cheatSheet: sum.cheatSheet } });
       break;
     }
+    case "transcriber": {
+      if (!deps.readImage) throw new Error("photo intake needs a SAGE_HOME blob store");
+      const images = (fx.input.blobHashes as string[]).map(h => deps.readImage!(h));
+      const text = await call("transcriber", TRANSCRIBER_SYSTEM, transcriberUser(String(fx.input.stem ?? "")), parseTranscription, undefined, undefined, images);
+      out.push({ actor: "role", event: { type: "transcription_proposed", text } });
+      break;
+    }
     case "researcher": {
       const limits = fx.input.limits as { maxSearches: number; maxFetches: number };
       const items = await call("researcher", researcherSystem(limits), researcherUser({ ...fx.input, limits: undefined, plan: s.plan ? s.plan.nodes.map(n => ({ id: n.id, title: n.title })) : undefined }),
@@ -147,5 +156,6 @@ export const DEFAULT_ROLE_MODELS: RoleModels = {
   feynman: { provider: "antigravity", model: "gemini-3.8-flash" },
   summarizer: { provider: "antigravity", model: "gemini-3.8-flash" },
   researcher: { provider: "antigravity", model: "gemini-3.8-flash" },
-  checker: { provider: "antigravity", model: "gemini-3.8-flash" },                // blind key check (owner: cheap model where code can't calculate)
+  checker: { provider: "antigravity", model: "gemini-3.8-flash" },
+  transcriber: { provider: "antigravity", model: "gemini-3.8-flash" },            // owner M5: flash reads scrap_work photos; the learner confirms the text                // blind key check (owner: cheap model where code can't calculate)
 };

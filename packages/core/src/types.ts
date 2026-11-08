@@ -92,6 +92,8 @@ export interface Attempt {
   id: string; itemId: string; responseEventId: string; response: string; at: string;
   assistance: AssistanceRecord[]; independent: boolean; isRepair: boolean; cueLevel: 0 | 1 | 2 | 3; latencyMs: number;
   grade?: Grade; supersededGrades?: Grade[]; diagnostic?: boolean; check?: "node_check" | "final";
+  /** scrap_work: blob hashes of the photos the learner-confirmed transcription came from. */
+  fromImages?: string[];
 }
 
 export type HypothesisCategory = "conceptual" | "procedural" | "selection" | "representation" | "prerequisite" | "slip" | "unknown";

@@ -251,6 +251,30 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       p.status = p.acceptedItemIds.length === p.items.length ? "accepted" : "partially_accepted";
       return;
     }
+    case "image_consented": {
+      const cur = s.current ?? fail("no item to attach working to");
+      if (s.pendingAttemptId || s.feedbackAttemptId) fail("finish the previous item first");
+      if (!ev.blobHashes.length || ev.blobHashes.length > 4 || !ev.blobHashes.every(h => /^[a-f0-9]{64}$/.test(h))) fail("1–4 stored images are required");
+      s.scrap = { itemId: cur.itemId, blobHashes: [...ev.blobHashes], status: "reading" };
+      log(s, now, "consent", `${ev.blobHashes.length} photo(s) sent to ${ev.provider}/${ev.model} with the learner's consent, to read their working`);
+      fx.push({ kind: "call_role", role: "transcriber", purpose: "transcribe", input: { itemId: cur.itemId, blobHashes: ev.blobHashes, stem: s.items.get(cur.itemId)?.stem ?? "" } });
+      return;
+    }
+    case "transcription_proposed": {
+      const sc = s.scrap;
+      if (!sc || sc.status !== "reading" || s.current?.itemId !== sc.itemId) return fail("no photo is being read");
+      sc.status = "review"; sc.text = ev.text.slice(0, 24000);
+      fx.push({ kind: "transcription_review", itemId: sc.itemId, text: sc.text });
+      return;
+    }
+    case "transcription_confirmed": {
+      const sc = s.scrap;
+      if (sc?.status !== "review" || s.current?.itemId !== sc.itemId) fail("no transcription awaiting confirmation");
+      s.scrap = undefined;
+      submit(s, { type: "response_submitted", input: { kind: "text", text: ev.text }, responseEventId: ev.responseEventId, latencyMs: ev.latencyMs }, now, fx);
+      s.attempts.at(-1)!.fromImages = sc!.blobHashes; // the learner confirmed (or edited) this text; the model only proposed it
+      return;
+    }
     case "tick": return;
   }
 }

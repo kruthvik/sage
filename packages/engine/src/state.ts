@@ -29,6 +29,8 @@ export interface EngineState {
   packs: Map<string, SourcePack>; researchKeys: Set<string>;   // researcher packs; trigger keys already requested (cache)
   spend: { calls: number; inputTokens: number; outputTokens: number; costUsd: number | "unknown" };
   timeline: TimelineEntry[];
+  /** Photo intake for the current item (SPEC §7: per-message consent; the learner confirms the transcription before scoring). */
+  scrap?: { itemId: string; blobHashes: string[]; status: "reading" | "review"; text?: string };
 }
 
 export type EngineEvent =
@@ -58,6 +60,9 @@ export type EngineEvent =
   | { type: "research_requested"; question: string }
   | { type: "research_pack_received"; pack: Omit<SourcePack, "status" | "acceptedItemIds">; items?: SourcePackItem[] }
   | { type: "research_pack_accepted"; packId: string; itemIds?: string[] }
+  | { type: "image_consented"; blobHashes: string[]; provider: string; model: string }
+  | { type: "transcription_proposed"; text: string }
+  | { type: "transcription_confirmed"; text: string; responseEventId: string; latencyMs: number }
   | { type: "tick" };
 
 /** Who may emit each event (DESIGN.md). The reducer rejects anything else, so a model can't author learner work (F10). */
@@ -67,10 +72,11 @@ export const EVENT_ACTOR: Record<EngineEvent["type"], "learner" | "role" | "tuto
   time_extended: "learner", reviews_consented: "learner", research_pack_accepted: "learner", research_requested: "tutor", research_pack_received: "role",
   plan_proposed: "role", bank_generated: "role", grade_received: "role", key_dispute_resolved: "role", plan_nodes_merged: "learner", digest_written: "role", role_call_logged: "host",
   chunk_presented: "tutor", item_presented: "tutor", move_selected: "tutor", hypothesis_proposed: "tutor", tick: "host",
+  image_consented: "learner", transcription_proposed: "role", transcription_confirmed: "learner",
 };
 
 export type Effect =
-  | { kind: "call_role"; role: "planner" | "generator" | "grader" | "summarizer" | "researcher"; purpose: string; background?: boolean; input: Record<string, unknown> }
+  | { kind: "call_role"; role: "planner" | "generator" | "grader" | "summarizer" | "researcher" | "transcriber"; purpose: string; background?: boolean; input: Record<string, unknown> }
   | { kind: "tutor_turn"; phase: LoopPhase; tools: readonly string[]; candidates: Candidate[] }
   | { kind: "present_chunk"; text: string }
   | { kind: "present_item"; item: PublicItem; cueText?: string }
@@ -87,7 +93,8 @@ export type Effect =
   | { kind: "write_export"; what: "session" | "node" | "final" }
   | { kind: "checkpoint" }
   | { kind: "item_rejected"; itemId: string; problems: string[] }
-  | { kind: "plan_fit"; fit: PlanFit };
+  | { kind: "plan_fit"; fit: PlanFit }
+  | { kind: "transcription_review"; itemId: string; text: string };
 
 export type PublicItem = Pick<Item, "id" | "nodeId" | "activityType" | "stem" | "choices" | "targets" | "cases" | "format" | "difficulty">;
 export const publicItem = (i: Item): PublicItem => ({ id: i.id, nodeId: i.nodeId, activityType: i.activityType, stem: i.stem, choices: i.choices, ...(i.targets ? { targets: i.targets } : {}), ...(i.cases ? { cases: i.cases } : {}), format: i.format, difficulty: i.difficulty });

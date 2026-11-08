@@ -2,7 +2,7 @@
 // real Sage tools. Used by driver/server tests and as the eval's fixed (non-adaptive) baseline tutor.
 import type { DriverRuntime } from "../../agent/src/driver.ts";
 import type { RoleCallInput, RoleCallResult, TutorTurnResult } from "../../pi-adapter/src/runtime.ts";
-import { PLANNER_SYSTEM, GENERATOR_SYSTEM, SUMMARIZER_SYSTEM } from "../../agent/src/roles.ts";
+import { PLANNER_SYSTEM, GENERATOR_SYSTEM, SUMMARIZER_SYSTEM, TRANSCRIBER_SYSTEM } from "../../agent/src/roles.ts";
 import { CHECKER_SYSTEM } from "../../agent/src/keycheck.ts";
 import { GRADER_SYSTEM } from "../../agent/src/grader.ts";
 
@@ -33,6 +33,7 @@ export function fakeRuntime(opts: { nodes?: number } = {}): DriverRuntime {
     if (i.system === GRADER_SYSTEM) return res(JSON.stringify({ criteria: [{ index: 0, credit: 1, quote: i.user.split("<<<\n").at(-1)!.split("\n>>>")[0]!.slice(0, 20) }], flaws: [], feedback: "Good." }));
     if (i.system === CHECKER_SYSTEM) return res(JSON.stringify({ answers: [] })); // shortcut: the fake checker abstains (verdict unknown keeps items); host.test covers real verdicts
     if (i.system === SUMMARIZER_SYSTEM) return res(JSON.stringify({ digest: "Recalls the key terms reliably.", cheatSheet: ["term = definition"] }));
+    if (i.system === TRANSCRIBER_SYSTEM) return res(JSON.stringify({ text: `x^2 + 2x = 8 (from ${i.images?.length ?? 0} photo)` }));
     return res(JSON.stringify({ items: [] }));
   };
   const tutorTurn = async (i: Parameters<DriverRuntime["tutorTurn"]>[0]): Promise<TutorTurnResult> => {

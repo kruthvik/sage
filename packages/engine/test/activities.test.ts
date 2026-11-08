@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import type { Item } from "../../core/src/types.ts";
 import { gradeDeterministic, passed, validateItem } from "../src/items.ts";
 
-const base = { id: "i", nodeId: "n", subskillIds: ["s"], difficulty: 2, partition: "practice", familyId: "f", evidences: ["recall"] } as const;
+const base: Pick<Item, "id" | "nodeId" | "subskillIds" | "difficulty" | "partition" | "familyId" | "evidences"> = { id: "i", nodeId: "n", subskillIds: ["s"], difficulty: 2, partition: "practice", familyId: "f", evidences: ["recall"] };
 const ordering = (order: number[]): Item => ({ ...base, activityType: "ordering", stem: "Put the steps of long division in order.", choices: ["Multiply", "Divide", "Bring down", "Subtract"], key: { kind: "order", order } });
 const matching: Item = { ...base, activityType: "matching", stem: "Match each organelle to its job.", choices: ["Mitochondrion", "Ribosome"], targets: ["Makes proteins", "Releases energy", "Stores water"], key: { kind: "match", pairs: [1, 0] } };
 

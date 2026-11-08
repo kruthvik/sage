@@ -1,6 +1,7 @@
 // Session driver (M3): the one place that owns live state. Every event goes reducer → ledger (in that order: a rejected
 // event is never stored), effects are drained in order, roles and tutor turns run through the host, and learner-facing
 // effects are emitted to the client. The researcher runs in the background and never blocks the drain.
+import { readImage } from "../../storage/src/blobs.ts";
 import type { Effect, EngineEvent, EngineState } from "../../engine/src/state.ts";
 import { EVENT_ACTOR, initialState } from "../../engine/src/state.ts";
 import { reduce, EngineError, sessionState, type Actor } from "../../engine/src/loop.ts";
@@ -31,6 +32,8 @@ export class SessionDriver {
   exportsHome?: string;
   /** Owner-supplied TTF/OTF for PDF exports (settings.exportFontPath); built-in Helvetica when unset. */
   exportFontPath?: string;
+  /** SAGE_HOME/data/blobs: learner photos for scrap_work (read by the transcriber role after consent). */
+  blobsDir?: string;
 
   constructor(readonly sessionId: string, private ledger: Ledger, private rt: DriverRuntime, public models: RoleModels,
     private emit: (e: ServerEvent) => void, private now: () => string = () => new Date().toISOString()) {}
@@ -116,7 +119,7 @@ export class SessionDriver {
         const run = async () => {
           for (let attempt = 0; ; attempt++) {
             try {
-              const evs = await runRole(fx, this.state, { models: this.models, roleCall: this.rt.roleCall, researchCall: this.rt.researchCall, signal: this.abort.signal }, ++this.seq);
+              const evs = await runRole(fx, this.state, { models: this.models, roleCall: this.rt.roleCall, researchCall: this.rt.researchCall, signal: this.abort.signal, ...(this.blobsDir ? { readImage: (h: string) => readImage(this.blobsDir!, h) } : {}) }, ++this.seq);
               const rejected = evs.map(e => this.apply(e.event, e.actor)).filter((x): x is string => !!x);
               if (rejected.length) throw new Error(`role output rejected: ${rejected.join("; ")}`); // same retry-then-park path as a failed call
               return;
@@ -146,6 +149,7 @@ export class SessionDriver {
         return;
       }
       case "present_chunk": return this.out("tutor.done", { text: fx.text, kind: "chunk" });
+      case "transcription_review": return this.out("transcription.review", { itemId: fx.itemId, text: fx.text });
       case "present_item": return this.out("item.present", { item: fx.item, ...(fx.cueText ? { cueText: fx.cueText } : {}) });
       case "present_feedback": this.out("grade.result", { attemptId: fx.attemptId, score: fx.grade.score0to100 }); return this.out("feedback.present", fx);
       case "repair_required": return this.out("repair.required", fx);
