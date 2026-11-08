@@ -1,6 +1,7 @@
 // Isolated pi runtime + the one-shot role transport (SPEC §12.1, §13). Ported in spirit from v3 packages/pi/src/{runtime,planner}.ts:
 // v3 ran a tool-less child session per role call; pi 1.5's ModelRuntime.complete() gives the same single request with less machinery.
 import { mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { type PiSdk, type SagePaths } from "./sdk.ts";
 import { isolateProcess, loadPiWithFallback } from "./update.ts";
 
@@ -15,7 +16,7 @@ export interface SageRuntimeOptions {
 export interface RoleCallInput { provider: string; model: string; system: string; user: string; maxTokens?: number; timeoutMs?: number; signal?: AbortSignal; /** Provider-neutral reasoning level; omitted ⇒ provider default (the grader was calibrated with the default). */ reasoning?: "minimal" | "low" | "medium" | "high";
   /** Structured output: the model must answer by calling this one tool; its arguments come back as `text` (JSON). Providers that ignore the forced choice may still answer in text. */
   output?: { name: string; description: string; schema: Record<string, unknown> } }
-export interface RoleCallResult { text: string; stopReason: string; usage: { input: number; output: number; costUsd: number | "unknown" }; provider: string; model: string; ms: number }
+export interface RoleCallResult { text: string; stopReason: string; usage: { input: number; output: number; cached?: number; costUsd: number | "unknown" }; provider: string; model: string; ms: number }
 
 /** Structural copy of sage-extension's SageTool, bound to a bridge (pi-adapter never imports Sage packages above core). */
 export interface TutorTool { name: string; label: string; description: string; parameters: Record<string, unknown>; endsTurn: boolean; run(params: Record<string, unknown>): string }
@@ -60,7 +61,9 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
       const ctx = { systemPrompt: input.system, messages: [{ role: "user" as const, content: input.user, timestamp: started }],
         ...(out ? { tools: [{ name: out.name, description: out.description, parameters: out.schema }] } : {}) };
       // "required" is what antigravity maps to Gemini's forced function call (mode ANY); pi's own type only lists auto/none.
-      const o = { maxTokens: Math.min(input.maxTokens ?? ROLE_MAX_OUTPUT_TOKENS, ROLE_MAX_OUTPUT_TOKENS), signal: controller.signal, ...(out ? { toolChoice: "required" } : {}) };
+      // A stable key per system prompt lets the provider reuse its prompt cache across one-shot role calls (cached input bills at ~10%).
+      const sessionId = `sage-${createHash("sha256").update(input.system).digest("hex").slice(0, 16)}`;
+      const o = { maxTokens: Math.min(input.maxTokens ?? ROLE_MAX_OUTPUT_TOKENS, ROLE_MAX_OUTPUT_TOKENS), signal: controller.signal, sessionId, ...(out ? { toolChoice: "required" } : {}) };
       const msg = input.reasoning ? await models.completeSimple(model, ctx, { ...o, reasoning: input.reasoning } as never) : await models.complete(model, ctx, o as never);
       if (controller.signal.aborted) throw controller.signal.reason ?? new Error("cancelled");
       const calls = msg.content.filter(p => p.type === "toolCall") as { name: string; arguments: unknown }[];
@@ -71,7 +74,7 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
       if (!text.trim()) throw new Error("role call returned no text");
       const cost = msg.usage?.cost as { total?: number } | undefined;
       return { text, stopReason: msg.stopReason, provider: input.provider, model: input.model, ms: Date.now() - started,
-        usage: { input: msg.usage?.input ?? 0, output: msg.usage?.output ?? 0, costUsd: typeof cost?.total === "number" ? cost.total : "unknown" } };
+        usage: { input: msg.usage?.input ?? 0, output: msg.usage?.output ?? 0, cached: (msg.usage as { cacheRead?: number } | undefined)?.cacheRead ?? 0, costUsd: typeof cost?.total === "number" ? cost.total : "unknown" } };
     } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", relay); }
   }
 
@@ -161,9 +164,9 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
       const extra = session.getActiveToolNames().filter(n => !input.active.includes(n));
       if (extra.length) throw new Error(`tutor isolation check failed: unexpected tools ${extra.join(", ")}`);
       await session.prompt(input.user, { expandPromptTemplates: false, source: "extension" } as never);
-      const msgs = session.messages.filter(m => m.role === "assistant") as { content: { type: string; text?: string }[]; usage?: { input: number; output: number; cost?: { total?: number } } }[];
-      const usage = msgs.reduce((a, m) => ({ input: a.input + (m.usage?.input ?? 0), output: a.output + (m.usage?.output ?? 0),
-        costUsd: typeof m.usage?.cost?.total === "number" && a.costUsd !== "unknown" ? a.costUsd + m.usage.cost.total : "unknown" as const }), { input: 0, output: 0, costUsd: 0 as number | "unknown" });
+      const msgs = session.messages.filter(m => m.role === "assistant") as { content: { type: string; text?: string }[]; usage?: { input: number; output: number; cacheRead?: number; cost?: { total?: number } } }[];
+      const usage = msgs.reduce((a, m) => ({ input: a.input + (m.usage?.input ?? 0), output: a.output + (m.usage?.output ?? 0), cached: a.cached + (m.usage?.cacheRead ?? 0),
+        costUsd: typeof m.usage?.cost?.total === "number" && a.costUsd !== "unknown" ? a.costUsd + m.usage.cost.total : "unknown" as const }), { input: 0, output: 0, cached: 0, costUsd: 0 as number | "unknown" });
       const text = msgs.at(-1)?.content.filter(p => p.type === "text").map(p => p.text ?? "").join("\n") ?? "";
       return { ended, calls, text, usage, ms: Date.now() - started };
     } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", relay); session.dispose(); }
