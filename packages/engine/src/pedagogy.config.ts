@@ -26,6 +26,8 @@ export const BANK_SIZE = 12;                       // ED-18
 export const RETENTION_MIN_DELAY_MS = 86_400_000;  // ED-19, RM-15
 export const REVIEW_FIRST_DAYS = 2;                // ED-20, RM-14 (owner chose v3 baseline over FSRS)
 export const HIGH_OPEN_HYPOTHESIS_BLOCKS = true;   // ED-21
+export const HYPOTHESIS_RESOLVE_AFTER = 2;         // independent passes on probes that resolve a hypothesis (engine-side; the tutor rarely resolved them)
+export const MAX_PROBES = 3;                       // graded probes per hypothesis; still open after that → "uncertain" (no longer blocks the gate)
 export const DIGEST_TOKENS = 120;                  // ED-22
 export const FEEDBACK_WORDS = 60;                  // ED-24
 // ED-25 (owner reply 2): deductions apply only to a met criterion worded imprecisely; partly met criteria get partial credit instead.

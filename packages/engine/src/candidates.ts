@@ -1,7 +1,7 @@
 import type { Candidate, MoveKind, PlanNode, SubSkill } from "../../core/src/types.ts";
 import { gate, type EvidenceView, type GateResult } from "./evidence.ts";
 import { passed } from "./items.ts";
-import { POLICY_VERSION, REPEATED_FAILURE_ESCALATION } from "./pedagogy.config.ts";
+import { MAX_PROBES, POLICY_VERSION, REPEATED_FAILURE_ESCALATION } from "./pedagogy.config.ts";
 import type { EngineState } from "./state.ts";
 
 export const view = (s: EngineState): EvidenceView => ({ items: s.items, attempts: s.attempts, hypotheses: s.hypotheses, deliveredAt: s.deliveredAt });
@@ -23,7 +23,8 @@ export function nextCandidates(s: EngineState): Candidate[] {
   const add = (kind: MoveKind, targets: string[], reasons: string[], evidenceIds: string[] = []) => {
     if (!out.some(c => c.kind === kind && c.targetSubskillIds.join() === targets.join())) out.push({ id: `${POLICY_VERSION}:${kind}:${targets.join(",")}`, kind, targetSubskillIds: targets, reasonCodes: reasons, evidenceIds });
   };
-  for (const h of s.hypotheses.values()) if (h.status === "open" && node.subskills.some(x => x.id === h.subskillId)) add("probe_hypothesis", [h.subskillId], [`open_${h.category}_hypothesis`], [h.id]);
+  const rank = { high: 0, medium: 1, low: 2 }; // one probe per subskill: the gate-blocking (high) hypothesis first
+  for (const h of [...s.hypotheses.values()].sort((a, b) => rank[a.confidence] - rank[b.confidence])) if (h.status === "open" && (s.probes.get(h.id) ?? 0) < MAX_PROBES && node.subskills.some(x => x.id === h.subskillId)) add("probe_hypothesis", [h.subskillId], [`open_${h.category}_hypothesis`], [h.id]);
   for (const x of node.subskills) {
     const r = g.get(x.id)!, mine = attemptsOn(s, x.id), last = mine.at(-1);
     if (!mine.length) { add(s.chunk?.subskillIds.includes(x.id) ? "check" : "teach", [x.id], ["no_evidence_yet"]); continue; }

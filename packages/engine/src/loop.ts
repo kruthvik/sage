@@ -6,7 +6,7 @@ import { fingerprint, gradeDeterministic, leaksKey, passed, validateItem } from 
 import { accrue, gateMinutes, paceNotice, planFit, usedMin } from "./pacing.ts";
 import {
   BANK_SIZE, CHUNK_WORDS, RESEARCH, DIAGNOSTIC, DIGEST_TOKENS, MAX_CUE_LEVEL, NODE_CHECK_SIZE, NODE_CHECK_SIZE_SPEED_UP, NODE_CHECK_THIS_NODE_SHARE,
-  POLICY_VERSION, REPAIR_MICRO_MIN, STRUGGLE_FAILURES, STRUGGLE_LATENCY_FACTOR, STRUGGLE_LATENCY_MIN_MS, primeFor, requiredDimensions,
+  HYPOTHESIS_RESOLVE_AFTER, MAX_PROBES, POLICY_VERSION, REPAIR_MICRO_MIN, STRUGGLE_FAILURES, STRUGGLE_LATENCY_FACTOR, STRUGGLE_LATENCY_MIN_MS, primeFor, requiredDimensions,
 } from "./pedagogy.config.ts";
 import { addDays, nextIntervalDays } from "./scheduler.ts";
 import { EVENT_ACTOR, TOOLS_BY_PHASE, initialState, publicItem, type Effect, type EngineEvent, type EngineState } from "./state.ts";
@@ -413,6 +413,18 @@ function applyGrade(s: EngineState, a: Attempt, g: Grade, now: string, fx: Effec
     if (!passed(g) && (!ladder || ladder.itemId !== item.id)) s.cue.set(id, { itemId: item.id, level: MAX_CUE_LEVEL });
     if (passed(g) && a.independent) s.cue.delete(id);
   }
+  // Probes settle hypotheses in code (flash eval: the tutor never resolved them, and an open high-confidence one blocks the gate forever).
+  const h = s.probing ? s.hypotheses.get(s.probing) : undefined;
+  if (h && h.status === "open" && !supersede && !a.isRepair && item.subskillIds.includes(h.subskillId)) {
+    s.probing = undefined;
+    s.probes.set(h.id, (s.probes.get(h.id) ?? 0) + 1);
+    const against = passed(g) && a.independent;
+    const next = { ...h, rev: h.rev + 1, ...(against ? { contradictingAttemptIds: [...h.contradictingAttemptIds, a.id] } : { supportingAttemptIds: [...h.supportingAttemptIds, a.id] }) };
+    if (next.contradictingAttemptIds.length >= HYPOTHESIS_RESOLVE_AFTER) next.status = "resolved";
+    else if (s.probes.get(h.id)! >= MAX_PROBES) next.status = "uncertain"; // evidence stays on record; it stops blocking the gate
+    s.hypotheses.set(h.id, next);
+    if (next.status === "resolved") fx.push({ kind: "notice", code: "hypothesis_changed", text: `Resolved: ${h.statement}` });
+  }
   s.feedbackAttemptId = a.id; s.phase = "feedback";
   log(s, now, "grade", `${a.itemId}: ${g.score0to100}${g.flaws.length ? ` · ${g.flaws.map(f => `${f.severity}: "${f.quote}"`).join("; ")}` : ""}`);
   fx.push({ kind: "present_feedback", attemptId: a.id, grade: g });
@@ -473,7 +485,8 @@ function toAdapt(s: EngineState, now: string, fx: Effect[]) {
 function applyMove(s: EngineState, c: Candidate, now: string, fx: Effect[]): void {
   switch (c.kind) {
     case "teach": case "represent_differently": s.phase = "teach"; fx.push(turn(s)); return;
-    case "check": case "fresh_retry": case "vary_application": case "method_choice": case "probe_hypothesis": s.phase = "check"; fx.push(turn(s)); return;
+    case "probe_hypothesis": s.probing = c.evidenceIds[0]; s.phase = "check"; fx.push(turn(s)); return;
+    case "check": case "fresh_retry": case "vary_application": case "method_choice": s.phase = "check"; fx.push(turn(s)); return;
     case "cued_retry": {
       const ladder = s.cue.get(c.targetSubskillIds[0]!) ?? fail("no cue ladder");
       if (ladder.level === 0) fail("cue ladder exhausted; use a fresh item");

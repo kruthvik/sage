@@ -25,3 +25,15 @@ Sources: adaptive rows from the main run; the calc adaptive row is the rerun aft
 - ww1 (history, long-form answers) passed nothing in 192 min: flash grades its written answers low (mean 63) and the gate needs changed-application evidence it rarely awards.
 - Remaining flash failures: grader replies with no parseable JSON (3× in the calc rerun; LaTeX escapes are now repaired, other causes not yet seen), occasional tutor_failed, and network errors (ENOTFOUND daily-cloudcode-pa.googleapis.com) in aid. Failed grades park the session in "grading" until retried.
 - Cost: $0.04–0.17 per session-hour adaptive, about $0.01 baseline.
+
+## Rerun after flash grading changes (2026-11-08, all flash, adaptive only)
+
+Grader answers through the forced `submit_grade` tool; per-criterion decision order in the prompt. Hypothesis fix below was not in this run.
+
+| unit | domain | arm | budget min | plan estimate min | nodes passed in budget | minutes to pass each node | end-of-session mixed check | cost per session-hour | model calls | progress | wall | end state |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| calc | math | adaptive | 90 | 116 (over) | 3/4 | 15, 35, 50, — | not reached | $0.18 | 289 | 92 graded (60 independent), mean 92, 144 min used, reached 4 nodes | 4811 s | feedback; 1 errors: tutor_failed |
+| ww1 | history | adaptive | 120 | 122 (over) | 0/5 | —, —, —, —, — | not reached | $0.24 | 421 | 209 graded (184 independent), mean 83, 192 min used, reached 1 nodes | 9518 s | feedback; 2 errors: tutor_failed |
+
+- calc: 3/4 in budget (was 1/4, then 2/4); 0 grader errors in 92 grades (earlier runs stalled on unparseable grades).
+- ww1: 0/5 again, but not a grading problem: the flash tutor proposed 4 hypotheses on node 1's first subskill (two high-confidence, which block the gate) and never resolved them, then chose `probe_hypothesis` 123 times. Only the first (medium) hypothesis was ever offered as a probe target. Fixed in the engine afterwards: graded probes now resolve a hypothesis in code (2 independent passes) or mark it uncertain after 3 probes, and high-confidence hypotheses are probed first.

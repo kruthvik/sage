@@ -18,6 +18,8 @@ export interface EngineState {
   feedbackAttemptId?: string;                  // awaiting feedback.ack
   repairAttemptId?: string;                    // blocking flaw needs repair
   disputed: Set<string>;
+  probing?: string;                            // hypothesis the current probe move targets
+  probes: Map<string, number>;                 // hypothesisId → graded probes so far (capped by MAX_PROBES)
   candidates: Candidate[]; nextIntendedMove: string;
   check?: { nodeId: string; itemIds: string[]; idx: number; final: boolean };
   diagnostic: { status: "none" | "pending" | "running" | "skipped" | "done"; startedAt?: string };
@@ -100,7 +102,7 @@ export function initialState(): EngineState {
   return {
     sessionId: "", goal: undefined as unknown as Goal, phase: "intake", stopped: false,
     items: new Map(), attempts: [], hypotheses: new Map(), decisions: [], deliveredAt: new Map(), exposedFamilies: new Map(),
-    chunkCollapsed: false, cue: new Map(), disputed: new Set(), candidates: [], nextIntendedMove: "",
+    chunkCollapsed: false, cue: new Map(), disputed: new Set(), probes: new Map(), candidates: [], nextIntendedMove: "",
     diagnostic: { status: "none" }, time: { nodeMs: new Map(), idleGaps: 0 }, confirm: new Map(), counter: 0,
     reviews: [], leftWithGaps: new Map(), packs: new Map(), researchKeys: new Set(), spend: { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 }, timeline: [],
   };

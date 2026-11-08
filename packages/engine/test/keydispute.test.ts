@@ -91,3 +91,48 @@ test("regression (flash eval): choosing checkpoint saves and hands the tutor ano
   expect(t.candidates.some(c => c.kind === "checkpoint")).toBe(false);
   expect(t.candidates.length).toBeGreaterThan(0);
 });
+
+function toAdapt() {
+  const d = driver(120);
+  d.go({ type: "plan_proposed", plan }, "role");
+  d.go({ type: "plan_approved" }, "learner");
+  d.go({ type: "bank_generated", purpose: "node", nodeId: "n1", items: bank("n1", "s1") }, "role");
+  d.go({ type: "item_presented", itemId: "s1-p1" }, "tutor");
+  d.go({ type: "response_submitted", input: { kind: "text", text: "27" }, responseEventId: "r1", latencyMs: 1000 }, "learner");
+  d.go({ type: "feedback_acked", attemptId: "a1" }, "learner");
+  d.go({ type: "chunk_presented", text: "Bring the exponent down and lower it by one.", subskillIds: ["s1"] }, "tutor");
+  d.go({ type: "item_presented", itemId: "s1-p2" }, "tutor");
+  d.go({ type: "response_submitted", input: { kind: "text", text: "4" }, responseEventId: "r2", latencyMs: 1000 }, "learner");
+  d.go({ type: "feedback_acked", attemptId: "a2" }, "learner");
+  d.go({ type: "hypothesis_proposed", hypothesis: { id: "hm", subskillId: "s1", category: "procedural", statement: "medium one", confidence: "medium", supportingAttemptIds: ["a2"], contradictingAttemptIds: [], status: "open" } }, "tutor");
+  d.go({ type: "hypothesis_proposed", hypothesis: { id: "hh", subskillId: "s1", category: "procedural", statement: "drops the coefficient", confidence: "high", supportingAttemptIds: ["a2"], contradictingAttemptIds: [], status: "open" } }, "tutor");
+  return d;
+}
+const probe = (d: ReturnType<typeof driver>, itemId: string, answer: string, n: number) => {
+  while (d.s.phase !== "adapt") d.go({ type: "feedback_acked", attemptId: d.s.feedbackAttemptId! }, "learner");
+  const c = d.s.candidates.find(x => x.kind === "probe_hypothesis");
+  if (!c) return false;
+  d.go({ type: "move_selected", candidateId: c.id, reasonCodes: ["open_procedural_hypothesis"], nextIntendedMove: "probe" }, "tutor");
+  d.go({ type: "item_presented", itemId }, "tutor");
+  d.go({ type: "response_submitted", input: { kind: "text", text: answer }, responseEventId: `p${n}`, latencyMs: 1000 }, "learner");
+  return true;
+};
+
+test("regression (flash eval): graded probes resolve a hypothesis in code, the high-confidence one first", () => {
+  const d = toAdapt();
+  expect(d.s.candidates.find(x => x.kind === "probe_hypothesis")!.evidenceIds).toEqual(["hh"]);
+  probe(d, "s1-p3", "32", 1);
+  expect(d.s.hypotheses.get("hh")!.status).toBe("open");
+  probe(d, "s1-v1", "12", 2);
+  expect(d.s.hypotheses.get("hh")!.status).toBe("resolved");
+  expect(d.s.hypotheses.get("hh")!.contradictingAttemptIds).toHaveLength(2);
+  expect(d.s.hypotheses.get("hm")!.status).toBe("open");
+});
+
+test("regression (flash eval): a hypothesis still open after MAX_PROBES becomes uncertain and stops being offered", () => {
+  const d = toAdapt();
+  let n = 0;
+  for (const id of ["s1-p3", "s1-v1", "s1-v2"]) expect(probe(d, id, "999", ++n)).toBe(true);
+  expect(d.s.hypotheses.get("hh")!.status).toBe("uncertain");
+  expect(d.s.hypotheses.get("hh")!.supportingAttemptIds).toHaveLength(4);
+});
