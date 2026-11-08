@@ -5,7 +5,10 @@ export function extractJson(text: string): unknown {
     if (!cand) continue;
     const start = cand.indexOf("{"), end = cand.lastIndexOf("}");
     if (start < 0 || end <= start) continue;
-    try { return JSON.parse(cand.slice(start, end + 1)); } catch { /* try next */ }
+    const body = cand.slice(start, end + 1);
+    try { return JSON.parse(body); } catch { /* repair below */ }
+    // Flash writes LaTeX (`\(`, `\sqrt`) inside strings; double any backslash that doesn't start a valid JSON escape.
+    try { return JSON.parse(body.replace(/\\(["\\/bfnrtu])|\\/g, (m, ok) => ok ? m : "\\\\")); } catch { /* try next */ }
   }
   throw new Error("model reply contained no parseable JSON object");
 }

@@ -5,6 +5,7 @@ import type { Item, PlanNode, Partition } from "../../core/src/types.ts";
 import type { RoleCallInput, RoleCallResult } from "../../pi-adapter/src/runtime.ts";
 import { GRADER_SYSTEM, graderUser, parseGrade } from "./grader.ts";
 import { validateGrade } from "../../engine/src/evidence.ts";
+import { DIGEST_TOKENS } from "../../engine/src/pedagogy.config.ts";
 import { CHECKER_SYSTEM, KEY_DISPUTE_SYSTEM, checkable, checkerUser, compareKey, keyDisputeUser, parseChecker, parseKeyDispute } from "./keycheck.ts";
 import { PLANNER_SYSTEM, plannerUser, parsePlan, GENERATOR_SYSTEM, generatorUser, parseItems, SUMMARIZER_SYSTEM, summarizerUser, parseSummary, researcherSystem, researcherUser, parsePack } from "./roles.ts";
 
@@ -32,7 +33,11 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
       const req = { provider: m.provider, model: m.model, system, user, ...(m.reasoning ? { reasoning: m.reasoning } : {}), ...(deps.signal ? { signal: deps.signal } : {}) };
       const r = research ? await deps.researchCall({ ...req, limits: research }) : await deps.roleCall(req);
       out.push({ actor: "host", event: { type: "role_call_logged", role, inputTokens: r.usage.input, outputTokens: r.usage.output, ...(r.usage.costUsd === "unknown" ? {} : { costUsd: r.usage.costUsd }) } });
-      try { return parse(r.text); } catch (e) { if (attempt >= 1) throw e; }
+      try { return parse(r.text); } catch (e) {
+        if (attempt >= 1) throw e;
+        // The retry says what was wrong (flash repeated the same unquoted criteria when simply asked again).
+        user += `\n\nYour previous reply was rejected: ${(e as Error).message.slice(0, 400)}. Fix exactly that and reply again with JSON only. Every quote must be copied word for word from the learner's response.`;
+      }
     }
   };
   const node = (id: unknown) => s.plan?.nodes.find(n => n.id === id);
@@ -107,7 +112,9 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
         flaws: a.grade?.flaws.filter(f => f.severity !== "polish").map(f => f.problem) }));
       const sum = await call("summarizer", SUMMARIZER_SYSTEM, summarizerUser({ node: { title: n.title, subskills: n.subskills.map(x => x.statement) }, attempts: evidence,
         hypotheses: [...s.hypotheses.values()].filter(h => n.subskills.some(x => x.id === h.subskillId)).map(h => ({ statement: h.statement, status: h.status })) }), parseSummary);
-      out.push({ actor: "role", event: { type: "digest_written", nodeId: n.id, digest: sum.digest } });
+      const cap = DIGEST_TOKENS * 5; // the engine's digest budget; a long summary is trimmed at a word, not rejected
+      const digest = sum.digest.length <= cap ? sum.digest : `${sum.digest.slice(0, cap - 1).replace(/\s+\S*$/, "")}…`;
+      out.push({ actor: "role", event: { type: "digest_written", nodeId: n.id, digest } });
       break;
     }
     case "researcher": {
