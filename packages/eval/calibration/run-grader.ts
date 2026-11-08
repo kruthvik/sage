@@ -1,8 +1,8 @@
 // Real-grader calibration (SPEC §18.4, task 3). Usage: bun packages/eval/calibration/run-grader.ts <provider>/<model> [repeats]
 // Reports A1–A10, C01–C20 (both owner-scored) and all 30. The gate (owner, 2026-11-08): every single repeat passes on all 30.
 // Credentials: Sage's own agent dir only (sage setup + sage login).
-import { writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { basename, join } from "node:path";
 import { evalRuntime } from "../src/eval-runtime.ts";
 import { GRADER_SYSTEM, GRADE_OUTPUT, graderUser, parseGrade } from "../../agent/src/grader.ts";
 import { validateGrade } from "../../engine/src/evidence.ts";
@@ -14,7 +14,10 @@ const [provider, model] = spec?.split("/") ?? [];
 if (!provider || !model) { console.error("usage: run-grader.ts <provider>/<model> [repeats]"); process.exit(2); }
 const repeats = Math.max(1, Number(repeatsArg ?? 1));
 const reasoning = process.env.REASONING as "minimal" | "low" | "medium" | "high" | undefined; // optional; the gate result is per (model, reasoning)
-const tag = reasoning ? `${model}@${reasoning}` : model!;
+// PROMPT_FILE swaps in a prompt variant for R&D (report tagged with its name); production always uses GRADER_SYSTEM.
+const variant = process.env.PROMPT_FILE;
+const system = variant ? readFileSync(variant, "utf8") : GRADER_SYSTEM;
+const tag = (reasoning ? `${model}@${reasoning}` : model!) + (variant ? `~${basename(variant).replace(/\.[^.]*$/, "")}` : "");
 
 const rt = await evalRuntime([provider]);
 
@@ -28,7 +31,7 @@ async function gradeOne(t: Triple): Promise<Row> {
     for (let attempt = 0; attempt < 2; attempt++) {
       let text = "";
       try {
-        const r = await rt.roleCall({ provider: provider!, model: model!, system: GRADER_SYSTEM, user, ...(process.env.OUTPUT === "text" ? {} : { output: GRADE_OUTPUT }), ...(reasoning ? { reasoning } : {}) });
+        const r = await rt.roleCall({ provider: provider!, model: model!, system, user, ...(process.env.OUTPUT === "text" ? {} : { output: GRADE_OUTPUT }), ...(reasoning ? { reasoning } : {}) });
         row.inTok += r.usage.input; row.outTok += r.usage.output; row.ms += r.ms; text = r.text;
         row.cost = r.usage.costUsd === "unknown" || row.cost === "unknown" ? "unknown" : row.cost + r.usage.costUsd;
         const g = parseGrade(r.text, { rubric: t.rubric, evidences: [] });

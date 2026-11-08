@@ -131,13 +131,17 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
 }
 
 /** Grader calibration notes shown next to a model in settings (eval/CALIBRATION-*.md; owner gate 2026-11-08). */
-export const GRADER_CALIBRATION: Record<string, string> = { "antigravity/gemini-3.8-flash": "fails calibration: lenient on weak answers" };
+export const GRADER_CALIBRATION: Record<string, string> = {
+  "openai/gpt-6.1-sol": "passes calibration (3/3 repeats, MAE 2.8–3.1)",
+  "openai/gpt-6.1-terra": "nearly passes: 2/3 repeats (one at +3.2 on A1–A10, limit +3)",
+  "antigravity/gemini-3.8-flash": "fails calibration: lenient on weak answers",
+};
 
 /** Owner defaults (2026-11-08: flash first, terra over sol). User-selectable in settings; sol stays a supported choice; never a Claude model (owner M0). */
 export const DEFAULT_ROLE_MODELS: RoleModels = {
   planner: { provider: "openai-codex", model: "gpt-6.1-terra", reasoning: "low" }, // sol needed low to meet the 60 s deadline; terra not yet measured
   tutor: { provider: "openai-codex", model: "gpt-6.1-terra" },
-  grader: { provider: "antigravity", model: "gemini-3.8-flash" },                   // passes A1–A10 with the schema-output prompt (MAE 7.3, 3 repeats); sol 5.5 on the older prompt
+  grader: { provider: "openai", model: "gpt-6.1-sol" },  // owner rule: cheapest model passing every calibration repeat (eval/CALIBRATION-openai-gpt-6.1-sol.md); "openai" = the owner's Sign in with ChatGPT login
   generator: { provider: "antigravity", model: "gemini-3.8-flash" },
   feynman: { provider: "antigravity", model: "gemini-3.8-flash" },
   summarizer: { provider: "antigravity", model: "gemini-3.8-flash" },
