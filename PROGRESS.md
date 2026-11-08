@@ -18,9 +18,9 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 | M1 Pure engine + ledger | **done** | `bun test`: 36 pass · `tsc` clean · `bun run eval` all 6 personas, 0 reducer errors |
 | M2 Agent layer ◆ | **done**; owner chose role defaults (sol: planner/tutor/grader; flash: generator/feynman/summarizer/researcher) | `bun test` 63 pass · grader A1–A10 PASS on sol · commits `4c1339e`…`a25f576` |
 | M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
-| M4 Exports | **done** (PDF maths font question open; see M4 below) | `bun test` 94 pass · `tsc` clean |
+| M4 Exports | **done** (PDF maths: owner chose embedding a TTF they supply, via `settings.exportFontPath`) | `bun test` 94 pass · `tsc` clean |
 | M5 Activities ◆ | **done** (owner batch answered 2026-11-08) | `bun test` 102 pass · `tsc` clean · live flash vision probe |
-| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 126 pass, 1 skipped (real YouTube paste fixture pending) · `tsc` clean · local Tesseract OCR verified |
+| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 127 pass, 1 skipped (timed YouTube paste fixture, optional) · `tsc` clean · local Tesseract OCR verified |
 
 M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechanisms, 27 engineering defaults), `docs/DESIGN.md`, `docs/LIBRARY_CANDIDATES.md`.
 
@@ -160,7 +160,7 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - **Limits found (flag):**
   - **YouTube (resolved 2026-11-08):** paste only. Sage never fetches from YouTube (watch pages and caption endpoints are refused), and uses no internal-API library and no yt-dlp. Adding a YouTube URL in the console shows the instruction and a paste box. The parser reads the "Show transcript" layout: timestamp lines, optional screen-reader duration labels, optional chapter headings, and inline `0:00 text`. Spans cite `watch?v=<id>&t=<s>s`. Citations show under teaching chunks and with feedback, never on an item. Opening one while an item waits is logged as a nudge (no key terms) or a strategy (key terms). If more than 15% of segments would get a chapter heading, the extra lines are treated as wrapped text. The researcher may look for the publisher's own transcript. A .vtt/.srt upload and direct caption URLs still work. **Real paste tested (2026-11-08):** the owner's ~95-minute accounting course (14,315 words, 2,541 lines) came with **no timestamps** and with `&quot;` entities. It is now accepted as an untimed transcript: 127 spans, links to the video without `&t`, a warning, and search finds the right passage. The fixture is local in `packages/sources/test/fixtures/local/` (gitignored). Owner (2026-11-08): content matters more than times, so per-moment links are not a priority. The timed parser stays, but it has only been tested on synthetic samples.
   - **PDF (resolved 2026-11-08):** PDFs now go through pdf.js via **unpdf, loaded from pi-web-access's install** (`<SAGE_HOME>/agent/npm/node_modules/unpdf`, 1.x only). It runs in a worker with a 20 s deadline, no font eval, ≤ 500 pages and ≤ 2M chars, and handles TrueType, object streams and Unicode maths (tested on 15 pages). If unpdf is missing (`sage setup` not run), the old path below still applies. `settings.get` reports which reader is active. Old path: v3's text parser refuses xref/object streams (most PDFs since 1.5). Worse, it only reads the 14 standard fonts with ASCII text, so real lecture PDFs (embedded TrueType fonts) will practically always go to OCR, and OCR refuses PDFs over 12 pages (45 s cap). **Owner ask:** a real PDF text dependency (pdf.js via `unpdf`, ~2 MB, pure JS), or keep this and export long PDFs as text.
-  - The generator's diagnostic, top-up and replacement calls don't get source excerpts yet; only the node bank does.
+  - **Resolved 2026-11-08:** diagnostic, top-up and replacement generation get the same learner excerpts and accepted research as the node bank. The diagnostic searches across every plan node, and the others search for their node (tested).
 
 ## Research findings worth knowing
 
@@ -225,8 +225,8 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 ## Next 3 tasks
 
 1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
-2. **Owner:** M4 PDF maths: keep pdf-lib with ASCII spellings, embed a Unicode TTF you supply, or add Typst (new dependency).
-3. Source excerpts for diagnostic/top-up/replacement generation.
+2. **Owner:** copy a Unicode TTF (e.g. one with maths symbols) into a plain folder and set `settings.exportFontPath` to it. Windows system fonts are hard-linked and refused, so copy rather than point at C:\Windows\Fonts.
+3. Fix whatever the real session turns up. Phase 1's build items are otherwise done.
 
 ## Commands
 

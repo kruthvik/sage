@@ -68,7 +68,7 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       const cap = DIAGNOSTIC[s.goal.mode];
       if (s.goal.preview.toggles.diagnostic && cap) {
         s.diagnostic = { status: "pending" }; s.phase = "bank";
-        fx.push({ kind: "call_role", role: "generator", purpose: "diagnostic", input: { plan: outline(s.plan!), maxItems: cap.maxItems, exam: s.goal.exam } });
+        fx.push({ kind: "call_role", role: "generator", purpose: "diagnostic", input: { plan: outline(s.plan!), maxItems: cap.maxItems, exam: s.goal.exam, sources: sourcesFor(s) } });
       } else startNextNode(s, now, fx);
       return;
     }
@@ -360,7 +360,7 @@ function voidItem(s: EngineState, item: Item, reason: string, corrected: ItemKey
     const r = gate(x, s.goal.mode, s.goal.pace, view(s));
     fx.push({ kind: "gate_update", nodeId: node.id, subskillId: x.id, passed: r.passed, stm: r.stm, missing: r.missing });
   }
-  fx.push({ kind: "call_role", role: "generator", purpose: "replace", input: { nodeId: item.nodeId, partition: item.partition, count: 1, subskillIds: item.subskillIds, activityType: item.activityType } });
+  fx.push({ kind: "call_role", role: "generator", purpose: "replace", input: { nodeId: item.nodeId, partition: item.partition, count: 1, subskillIds: item.subskillIds, activityType: item.activityType, sources: sourcesFor(s, item.nodeId) } });
 }
 
 const outline = (p: Plan) => p.nodes.map(n => ({ id: n.id, title: n.title, subskills: n.subskills.map(x => ({ id: x.id, statement: x.statement, kind: x.kind })) }));
@@ -553,7 +553,7 @@ function buildCheck(s: EngineState, node: PlanNode, final: boolean, now: string,
   const take = (i: Item | undefined) => { if (i && !picked.includes(i) && picked.length < size) picked.push(i); };
   if (!final) {
     const mine = unseen.filter(i => i.nodeId === node.id).sort((a, b) => b.difficulty - a.difficulty);
-    if (!mine.length) { s.phase = "node_check"; s.check = undefined; fx.push({ kind: "call_role", role: "generator", purpose: "topup", input: { nodeId: node.id, partition: "assessment", count: size } }); return; }
+    if (!mine.length) { s.phase = "node_check"; s.check = undefined; fx.push({ kind: "call_role", role: "generator", purpose: "topup", input: { nodeId: node.id, partition: "assessment", count: size, sources: sourcesFor(s, node.id) } }); return; }
     // Every original gap gets an independent recheck on a fresh item (v3 cram).
     const gaps = node.subskills.filter(x => s.attempts.some(a => !a.isRepair && a.grade && !passed(a.grade) && s.items.get(a.itemId)?.subskillIds.includes(x.id)));
     for (const g of gaps) take(mine.find(i => i.subskillIds.includes(g.id)));
@@ -719,8 +719,9 @@ function acceptPack(s: EngineState, ev: Extract<EngineEvent, { type: "research_p
 }
 
 /** Sources for a node: the learner's own first, then accepted research for this node or the whole unit. */
-function sourcesFor(s: EngineState, nodeId: string) {
-  const node = s.plan?.nodes.find(n => n.id === nodeId);
-  const research = [...s.packs.values()].flatMap(p => p.items.filter(i => p.acceptedItemIds.includes(i.id) && (!i.nodeId || i.nodeId === nodeId)));
-  return { learner: [...new Set([...(s.goal.sourceIds ?? []), ...(node?.sourceIds ?? [])])], research };
+/** No nodeId (diagnostic): every node's sources and all accepted research, since the diagnostic spans the whole plan. */
+function sourcesFor(s: EngineState, nodeId?: string) {
+  const nodes = s.plan?.nodes.filter(n => nodeId === undefined || n.id === nodeId) ?? [];
+  const research = [...s.packs.values()].flatMap(p => p.items.filter(i => p.acceptedItemIds.includes(i.id) && (nodeId === undefined || !i.nodeId || i.nodeId === nodeId)));
+  return { learner: [...new Set([...(s.goal.sourceIds ?? []), ...nodes.flatMap(n => n.sourceIds ?? [])])], research };
 }

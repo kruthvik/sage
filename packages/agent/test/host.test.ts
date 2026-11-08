@@ -42,3 +42,18 @@ test("learner source ids reach the generator as excerpts with span ids, and the 
   await runRole({ kind: "call_role", role: "planner", purpose: "plan", input: {} }, s, { models, roleCall, researchCall: roleCall, sources }, 2).catch(() => []);
   expect(users.some(u => u.includes("Outline of the learner's sources") && u.includes("Krebs cycle"))).toBe(true);
 });
+
+test("diagnostic, top-up and replacement generation get the same excerpts as the node bank", async () => {
+  const users: string[] = [], queries: string[] = [];
+  const roleCall = async (i: RoleCallInput) => { users.push(i.user); return reply(JSON.stringify({ items: [] })); };
+  const sources = { excerpts: (ids: string[], q: string) => { queries.push(q); return ids.map(id => ({ spanId: `${id}:7`, title: "Lecture 3", locator: "L1–40", text: "Glycolysis happens in the cytoplasm." })); }, outline: () => "" };
+  const plan = { nodes: [{ id: "n1", title: "Respiration", subskills: [{ id: "s1", statement: "Locate glycolysis" }] }] };
+  const s = { ...initialState(), plan, goal: { objective: "Pass bio", mode: "cram", pace: "normal", preview: {} } } as never;
+  const src = { learner: ["src_b"], research: [] }, deps = { models, roleCall, researchCall: roleCall, sources };
+  for (const [purpose, input] of [["diagnostic", { plan, sources: src }], ["topup", { nodeId: "n1", partition: "assessment", count: 2, sources: src }], ["replace", { nodeId: "n1", partition: "practice", count: 1, sources: src }]] as const) {
+    users.length = 0;
+    await runRole({ kind: "call_role", role: "generator", purpose, input }, s, deps, 3);
+    expect(users[0]).toContain("src_b:7"); expect(users[0]).toContain("Glycolysis happens in the cytoplasm");
+  }
+  expect(queries.every(q => q.includes("Respiration") && q.includes("Locate glycolysis"))).toBe(true);
+});

@@ -73,12 +73,16 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
       break;
     }
     case "generator": {
+      // Learner source ids → the best-matching excerpts for the query; generator items cite their spanIds in sourceSpans.
+      const withExcerpts = (query: string, k: number) => {
+        const src = fx.input.sources as { learner: string[]; research: unknown[] } | undefined;
+        if (src && deps.sources) fx = { ...fx, input: { ...fx.input, sources: { learner: deps.sources.excerpts(src.learner, query, k)
+          .map(e => ({ spanId: e.spanId, source: e.title, locator: e.locator, text: e.text })), research: src.research } } };
+      };
+      const about = (n?: PlanNode) => n ? [n.title, ...(n.subskills ?? []).map(x => x.statement)].join(" ") : "";
       if (fx.purpose === "node") {
         const n = fx.input.node as PlanNode;
-        const src = fx.input.sources as { learner: string[]; research: unknown[] } | undefined;
-        // Learner source ids → the best-matching excerpts for this node; generator items cite their spanIds in sourceSpans.
-        if (src && deps.sources) fx = { ...fx, input: { ...fx.input, sources: { learner: deps.sources.excerpts(src.learner, [n.title, ...(n.subskills ?? []).map(x => x.statement)].join(" "), 8)
-          .map(e => ({ spanId: e.spanId, source: e.title, locator: e.locator, text: e.text })), research: src.research } } };
+        withExcerpts(about(n), 8);
         const batches = await Promise.all(BANK_SPLIT.map(([partition, count], k) => call("generator", GENERATOR_SYSTEM,
           generatorUser({ ...fx.input, size: undefined, partition, count, note: `Write exactly ${count} ${partition} items.${partition !== "teaching" && ["cram", "accelerate", "learn"].includes(s.goal?.mode)
             ? ` This mode requires transfer: for each subskill, include one apply_problem with evidences ["changed_application"] and a variation whose baselineItemId is another item id in this same reply, changing context, representation, format or structure (not only surface).` : ""}` }),
@@ -88,12 +92,14 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
           t => parseItems(t, n.id, `${pfx}${r}`)));
         out.push({ actor: "role", event: { type: "bank_generated", purpose: "node", nodeId: n.id, items } });
       } else if (fx.purpose === "diagnostic") {
+        withExcerpts((s.plan?.nodes ?? []).map(about).join(" "), 12);
         const raw = await call("generator", GENERATOR_SYSTEM, generatorUser({ ...fx.input, partition: "practice", note: "Diagnostic: one quick item per subskill that best separates knows from doesn't know; give each item its nodeId." }),
           t => parseItems(t, "", pfx));
         const items = await verified(raw, async (bad, r) => call("generator", GENERATOR_SYSTEM, generatorUser({ ...fx.input, partition: "practice", avoidStems: bad.map(i => i.stem), note: `Diagnostic. ${replaceNote(bad)} Give each item its nodeId.` }), t => parseItems(t, "", `${pfx}${r}`)));
         out.push({ actor: "role", event: { type: "bank_generated", purpose: "diagnostic", items } });
       } else {
         const n = node(fx.input.nodeId);
+        withExcerpts(about(n), 8);
         const avoid = [...s.items.values()].filter(i => i.nodeId === n?.id).map(i => i.stem);
         const ask = (extra: Record<string, unknown>, p: string) => call("generator", GENERATOR_SYSTEM, generatorUser({ ...fx.input, node: n, mode: s.goal.mode, exam: s.goal.exam, ...extra }), t => parseItems(t, String(fx.input.nodeId), p));
         const items = await verified(await ask({ avoidStems: avoid }, pfx), (bad, r) => ask({ count: bad.length, avoidStems: [...avoid, ...bad.map(i => i.stem)], note: replaceNote(bad) }, `${pfx}${r}`));
