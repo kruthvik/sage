@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Ledger } from "../../../packages/storage/src/ledger.ts";
 import { SessionDriver, type DriverRuntime, type ServerEvent } from "../../../packages/agent/src/driver.ts";
-import { DEFAULT_ROLE_MODELS, type RoleModels } from "../../../packages/agent/src/host.ts";
+import { DEFAULT_ROLE_MODELS, GRADER_CALIBRATION, type RoleModels } from "../../../packages/agent/src/host.ts";
 import { buildPacket } from "../../../packages/agent/src/packet.ts";
 import { EngineError } from "../../../packages/engine/src/loop.ts";
 import type { EngineEvent } from "../../../packages/engine/src/state.ts";
@@ -103,7 +103,7 @@ export function startServer(opts: ServeOptions) {
       case "research.status": return { packs: driver(id!).view().packs, searchAvailable: true };
       case "research.pack": { const pk = driver(id!).state.packs.get(p.packId as string); if (!pk) throw new RpcError(ERR.params, "unknown pack"); return pk; }
       case "sources.acceptPack": return act({ type: "research_pack_accepted", packId: p.packId as string, ...(p.itemIds ? { itemIds: p.itemIds as string[] } : {}) });
-      case "settings.get": return { roleModels: readModels(), apiVersion: API_VERSION };
+      case "settings.get": return { roleModels: readModels(), graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
       case "settings.set": {
         const rm = p.roleModels as Record<string, { provider?: unknown; model?: unknown }> | undefined;
         for (const [role, m] of Object.entries(rm ?? {})) if (!(role in DEFAULT_ROLE_MODELS) || typeof m?.provider !== "string" || typeof m?.model !== "string") throw new RpcError(ERR.params, `roleModels.${role} needs a known role with provider and model`);

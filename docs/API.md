@@ -41,7 +41,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `research.status` | sessionId | read |  |
 | `research.pack` | sessionId, packId | read |  |
 | `sources.acceptPack` | sessionId, packId, itemIds? | learner (lease) |  |
-| `settings.get` | — | read |  |
+| `settings.get` | — | read | returns `roleModels` and `graderCalibration` (`provider/model` → calibration note, e.g. flash: "fails calibration: lenient on weak answers") |
 | `settings.set` | roleModels? | learner (lease) |  |
 | `usage.get` | sessionId? | read |  |
 

@@ -31,3 +31,13 @@ test("calibrate: a perfect grader passes; a consistently lenient one fails on me
   expect(calibrate({ ...exact, A5: 96 }).lenientViolations).toEqual(["A5"]); // a 75 answer scored ≥95 (F1)
   expect(calibrate({ A1: 94 }).passed).toBe(false); // partial coverage never passes
 });
+
+test("calibrate: errors that cancel out still fail (owner 2026-11-08)", () => {
+  const exact = Object.fromEntries(CALIBRATION_SET.map(t => [t.id, t.target]));
+  expect(calibrate({ ...exact, A8: 93 })).toMatchObject({ overItems: ["A8"], lenientViolations: [], passed: false }); // A8 at 93 vs 65 slipped past the ≥95 rule
+  const anchorsLenient = Object.fromEntries(CALIBRATION_SET.map(t => [t.id, t.id.startsWith("A") ? Math.min(100, t.target + 6) : Math.max(0, t.target - 3)]));
+  const r = calibrate(anchorsLenient);
+  expect(r.meanSigned).toBeLessThanOrEqual(3);
+  expect(r.signedAnchors!).toBeGreaterThan(3);
+  expect(r.passed).toBe(false);
+});

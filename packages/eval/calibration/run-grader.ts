@@ -38,6 +38,8 @@ async function gradeOne(t: Triple): Promise<Row> {
         break;
       } catch (e) {
         const msg = String((e as Error).message ?? e);
+        // Owner's plan quota: stop the whole run at the first limit error rather than keep spending retries against it.
+        if (/usage limit|usage_limit|quota|insufficient|rate.?limit|429/i.test(msg)) { console.error(`STOPPED: ${msg.slice(0, 300)}`); process.exit(3); }
         failures.push(`## ${t.id} attempt ${attempt}: ${msg}\n${text.slice(0, 2000) || "(empty reply)"}\n`);
         if (attempt) { row.error = msg.slice(0, 160); break; }
         user += `\n\nYour previous reply was rejected: ${msg.slice(0, 400)}. Fix exactly that and reply again with JSON only.`;
@@ -54,11 +56,12 @@ async function pool<T, R>(xs: T[], n: number, f: (x: T) => Promise<R>): Promise<
 }
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+const sg = (x?: number) => x === undefined ? "—" : (x >= 0 ? "+" : "") + x.toFixed(1);
 function section(title: string, set: Triple[], rows: Row[]) {
   const scored = rows.filter(r => r.scores.length);
-  const res = calibrate(Object.fromEntries(scored.map(r => [r.id, mean(r.scores)])), set, { maxMae: CALIBRATION.maxMae, maxMeanSignedError: CALIBRATION.maxMeanSignedError, ceiling: CALIBRATION.lenientCeiling });
+  const res = calibrate(Object.fromEntries(scored.map(r => [r.id, mean(r.scores)])), set);
   const lines = [`## ${title}`, "",
-    `n=${res.n}/${set.length} · MAE ${res.mae.toFixed(1)} (≤${CALIBRATION.maxMae}) · mean signed ${res.meanSigned >= 0 ? "+" : ""}${res.meanSigned.toFixed(1)} (≤+${CALIBRATION.maxMeanSignedError}) · lenient ceiling violations: ${res.lenientViolations.join(", ") || "none"} · **${res.passed ? "PASS" : "FAIL"}**`, "",
+    `n=${res.n}/${set.length} · MAE ${res.mae.toFixed(1)} (≤${CALIBRATION.maxMae}) · mean signed ${res.meanSigned >= 0 ? "+" : ""}${res.meanSigned.toFixed(1)} (≤+${CALIBRATION.maxMeanSignedError}) · signed A ${sg(res.signedAnchors)} · signed ≤70 ${sg(res.signedLow)} · >+20: ${res.overItems.join(", ") || "none"} · ≥95 on ≤85: ${res.lenientViolations.join(", ") || "none"} · **${res.passed ? "PASS" : "FAIL"}**`, "",
     "| id | target | score | Δ | runs | validity problems | error |", "|---|---|---|---|---|---|---|",
     ...rows.map(r => { const s = r.scores.length ? mean(r.scores) : NaN;
       return `| ${r.id} | ${r.target} | ${Number.isNaN(s) ? "—" : s.toFixed(0)} | ${Number.isNaN(s) ? "—" : (s - r.target >= 0 ? "+" : "") + (s - r.target).toFixed(0)} | ${r.scores.join(", ")} | ${[...new Set(r.problems)].join("; ")} | ${r.error ?? ""} |`; }), ""];
@@ -72,11 +75,10 @@ const cost = all.some(r => r.cost === "unknown") ? "unknown" : `$${all.reduce((x
 const A = section("A1–A10", ANCHORS, a);
 const C = section("C01–C20", GENERATED, c);
 const ALL = section("All 30 (mean of repeats)", CALIBRATION_SET, all);
-const limits = { maxMae: CALIBRATION.maxMae, maxMeanSignedError: CALIBRATION.maxMeanSignedError, ceiling: CALIBRATION.lenientCeiling };
-const perRepeat = Array.from({ length: repeats }, (_, i) => calibrate(Object.fromEntries(all.filter(r => r.scores[i] !== undefined).map(r => [r.id, r.scores[i]!])), CALIBRATION_SET, limits));
+const perRepeat = Array.from({ length: repeats }, (_, i) => calibrate(Object.fromEntries(all.filter(r => r.scores[i] !== undefined).map(r => [r.id, r.scores[i]!])), CALIBRATION_SET));
 const gatePassed = perRepeat.every(r => r.passed);
-const gate = ["## Gate: each repeat on all 30", "", "| repeat | n | MAE | mean signed | ceiling violations | result |", "|---|---|---|---|---|---|",
-  ...perRepeat.map((r, i) => `| ${i + 1} | ${r.n}/30 | ${r.mae.toFixed(1)} | ${r.meanSigned >= 0 ? "+" : ""}${r.meanSigned.toFixed(1)} | ${r.lenientViolations.join(", ") || "none"} | ${r.passed ? "pass" : "FAIL"} |`),
+const gate = ["## Gate: each repeat on all 30", "", "| repeat | n | MAE (≤8) | signed all (≤+3) | signed A1–A10 (≤+3) | signed targets ≤70 (≤+3) | items >+20 | ≥95 on target ≤85 | result |", "|---|---|---|---|---|---|---|---|---|",
+  ...perRepeat.map((r, i) => `| ${i + 1} | ${r.n}/30 | ${r.mae.toFixed(1)} | ${sg(r.meanSigned)} | ${sg(r.signedAnchors)} | ${sg(r.signedLow)} | ${r.overItems.join(", ") || "none"} | ${r.lenientViolations.join(", ") || "none"} | ${r.passed ? "pass" : "FAIL"} |`),
   "", `Worst repeat MAE ${Math.max(...perRepeat.map(r => r.mae)).toFixed(1)} · **${gatePassed ? "PASS" : "FAIL"}**`, ""];
 const report = [`# Grader calibration: ${provider}/${tag}`, "",
   `${new Date().toISOString()} · repeats ${repeats} · ${Math.round((Date.now() - started) / 1000)} s wall · tokens in ${all.reduce((x, r) => x + r.inTok, 0)} / out ${all.reduce((x, r) => x + r.outTok, 0)} · cost ${cost}`,

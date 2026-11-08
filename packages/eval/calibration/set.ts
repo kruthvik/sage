@@ -4,6 +4,7 @@
 // Rules: score criteria first (met / partly / not); deductions only on a *met* criterion worded imprecisely
 // (precision −7 typical, −10 for standard examiner deductions; polish −1, polish total ≤4); repeating an answer the stem gives earns nothing.
 import type { ActivityType, FlawSeverity } from "../../core/src/types.ts";
+import { CALIBRATION } from "../../engine/src/pedagogy.config.ts";
 
 export interface Triple {
   id: string; domain: string; author: "owner" | "claude_unreviewed"; tags: ("right_answer_wrong_reason" | "precision_only" | "strong" | "weak")[];
@@ -55,8 +56,8 @@ export const GENERATED: Triple[] = [
     flaws: [{ severity: "blocking", quote: "because dogs aren't cats", problem: "judges by the conclusion's truth, not the form" }] },
   { id: "C08", domain: "argument", author: "owner", tags: ["precision_only"], activityType: "explain_why", stem: "What is the difference between a valid and a sound argument?", rubric: ["valid: conclusion follows from the premises", "sound: valid and the premises are true"], response: "Valid means the conclusion follows. Sound means it's valid and also true.", target: 68,
     flaws: [{ severity: "blocking", quote: "it's valid and also true", problem: "doesn't say the *premises* are true (criterion 2 = 0.5)" }, { severity: "precision", quote: "the conclusion follows", problem: "follows from what? (−7)" }] },
-  { id: "C09", domain: "argument", author: "owner", tags: ["weak"], activityType: "explain_why", stem: "Give the strongest objection to the claim 'We should always tell the truth.'", rubric: ["states an objection", "uses a concrete case (e.g. murderer at the door)", "shows why the case defeats 'always'"], response: "Sometimes lying is fine.", target: 15,
-    flaws: [{ severity: "blocking", quote: "Sometimes lying is fine.", problem: "no case, no argument" }] },
+  { id: "C09", domain: "argument", author: "owner", tags: ["weak"], activityType: "explain_why", stem: "Give the strongest objection to the claim 'We should always tell the truth.'", rubric: ["states an objection", "uses a concrete case (e.g. murderer at the door)", "shows why the case defeats 'always'"], response: "Sometimes lying is fine.", target: 17,
+    flaws: [{ severity: "blocking", quote: "Sometimes lying is fine.", problem: "objection only gestured at (criterion 1 = 0.5); no case, no argument" }] },
   // Practical principles: music theory, chess
   { id: "C10", domain: "music", author: "owner", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "Why does a G7 chord tend to resolve to C major?", rubric: ["leading tone B resolves up to C", "tritone B–F resolves inward to C–E", "G is the dominant (V) of C"], response: "Because G comes right before C in the alphabet of chords.", target: 0,
     flaws: [{ severity: "blocking", quote: "G comes right before C in the alphabet of chords", problem: "not a real principle" }] },
@@ -69,8 +70,8 @@ export const GENERATED: Triple[] = [
   // Economics / statistics
   { id: "C14", domain: "stats", author: "owner", tags: ["right_answer_wrong_reason"], activityType: "explain_why", stem: "A study finds ice-cream sales and drownings rise together. Should we ban ice cream to reduce drownings? Explain.", rubric: ["says no", "names a confounder (hot weather/summer)", "correlation doesn't establish causation"], response: "No, because ice cream is too popular to ban.", target: 17,
     flaws: [{ severity: "blocking", quote: "because ice cream is too popular to ban", problem: "irrelevant reason; no confounder" }] },
-  { id: "C15", domain: "stats", author: "owner", tags: ["weak"], activityType: "explain_why", stem: "What does a 95% confidence interval mean?", rubric: ["the procedure captures the true parameter in 95% of repeated samples", "not a 95% probability that this particular interval contains it"], response: "We're 95% sure the true value is in the interval.", target: 10,
-    flaws: [{ severity: "blocking", quote: "We're 95% sure the true value is in the interval", problem: "no repeated-sampling meaning (criterion 1 = 0); close to the misreading (criterion 2 = 0.25)" }] },
+  { id: "C15", domain: "stats", author: "owner", tags: ["weak"], activityType: "explain_why", stem: "What does a 95% confidence interval mean?", rubric: ["the procedure captures the true parameter in 95% of repeated samples", "not a 95% probability that this particular interval contains it"], response: "We're 95% sure the true value is in the interval.", target: 0,
+    flaws: [{ severity: "blocking", quote: "We're 95% sure the true value is in the interval", problem: "no repeated-sampling meaning, and states the misreading (both criteria 0)" }] },
   { id: "C16", domain: "economics", author: "owner", tags: ["precision_only"], activityType: "explain_why", stem: "Why does a price ceiling below the equilibrium price cause a shortage?", rubric: ["quantity demanded rises at the lower price", "quantity supplied falls", "Qd > Qs is the shortage"], response: "At the lower price more people want it and sellers make less of it, so demand is bigger than supply.", target: 83,
     flaws: [{ severity: "precision", quote: "more people want it", problem: "quantity demanded, not people (−7)" }, { severity: "precision", quote: "demand is bigger than supply", problem: "should be quantity demanded exceeds quantity supplied: wrong technical term" }] },
   { id: "C17", domain: "personal_finance", author: "owner", tags: ["right_answer_wrong_reason"], activityType: "method_choice", stem: "You have high-interest credit-card debt (24%) and $1,000. Pay off debt or invest in an index fund? Why?", rubric: ["chooses paying the debt", "reason: guaranteed 24% return beats expected market returns"], response: "Pay the debt, because debt is bad and investing is risky.", target: 25,
@@ -85,13 +86,22 @@ export const GENERATED: Triple[] = [
 
 export const CALIBRATION_SET: Triple[] = [...ANCHORS, ...GENERATED];
 
-export interface CalibrationResult { n: number; mae: number; meanSigned: number; lenientViolations: string[]; passed: boolean }
-/** Scores a grader against the set (SPEC §18.4 + owner: MAE ≤ 8, mean signed error ≤ +3, no target ≤85 scoring ≥95). */
-export function calibrate(scores: Record<string, number>, set = CALIBRATION_SET, limits = { maxMae: 8, maxMeanSignedError: 3, ceiling: { target: 85, score: 95 } }): CalibrationResult {
+export interface CalibrationResult { n: number; mae: number; meanSigned: number; signedAnchors?: number; signedLow?: number; overItems: string[]; lenientViolations: string[]; passed: boolean }
+/**
+ * Scores a grader against the set (SPEC §18.4 + owner 2026-11-08). Errors must not cancel out: MAE ≤ 8 and mean signed ≤ +3 overall,
+ * mean signed ≤ +3 on A1–A10 alone and on targets ≤ 70 alone, no item more than +20 over its target, no target ≤ 85 scored ≥ 95.
+ */
+export function calibrate(scores: Record<string, number>, set = CALIBRATION_SET, limits = CALIBRATION): CalibrationResult {
   const rows = set.filter(t => scores[t.id] !== undefined).map(t => ({ t, d: scores[t.id]! - t.target }));
   const n = rows.length;
+  const signed = (rs: typeof rows) => rs.length ? rs.reduce((a, r) => a + r.d, 0) / rs.length : undefined;
   const mae = rows.reduce((a, r) => a + Math.abs(r.d), 0) / Math.max(1, n);
-  const meanSigned = rows.reduce((a, r) => a + r.d, 0) / Math.max(1, n);
-  const lenientViolations = rows.filter(r => r.t.target <= limits.ceiling.target && scores[r.t.id]! >= limits.ceiling.score).map(r => r.t.id);
-  return { n, mae, meanSigned, lenientViolations, passed: n === set.length && mae <= limits.maxMae && meanSigned <= limits.maxMeanSignedError && !lenientViolations.length };
+  const meanSigned = signed(rows) ?? 0;
+  const signedAnchors = signed(rows.filter(r => r.t.id.startsWith("A")));
+  const signedLow = signed(rows.filter(r => r.t.target <= limits.lowTarget));
+  const overItems = rows.filter(r => r.d > limits.maxItemOver).map(r => r.t.id);
+  const lenientViolations = rows.filter(r => r.t.target <= limits.lenientCeiling.target && scores[r.t.id]! >= limits.lenientCeiling.score).map(r => r.t.id);
+  const ok = (x?: number) => x === undefined || x <= limits.maxMeanSignedError;
+  return { n, mae, meanSigned, signedAnchors, signedLow, overItems, lenientViolations,
+    passed: n === set.length && mae <= limits.maxMae && ok(meanSigned) && ok(signedAnchors) && ok(signedLow) && !overItems.length && !lenientViolations.length };
 }

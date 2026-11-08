@@ -32,7 +32,7 @@ export const DIGEST_TOKENS = 120;                  // ED-22
 export const FEEDBACK_WORDS = 60;                  // ED-24
 // ED-25 (owner reply 2): deductions apply only to a met criterion worded imprecisely; partly met criteria get partial credit instead.
 export const DEDUCTION = { precision: 7, precisionRange: [5, 10], polish: 1, polishRange: [0, 2], polishCap: 4 } as const;
-export const CALIBRATION = { maxMae: 8, maxMeanSignedError: 3, lenientCeiling: { target: 85, score: 95 } } as const; // §18.4 + owner reply 2
+export const CALIBRATION = { maxMae: 8, maxMeanSignedError: 3, lenientCeiling: { target: 85, score: 95 }, lowTarget: 70, maxItemOver: 20 } as const; // §18.4 + owner reply 2; lowTarget/maxItemOver owner 2026-11-08 (signed ≤ +3 also on A1–A10 and on targets ≤ 70; no item > +20)
 export const RESEARCH = { maxSearches: 6, maxFetches: 6, maxOutputTokens: 4096 } as const; // ED-28
 export const REPEATED_FAILURE_ESCALATION = 2;      // ED-26, RM-16
 export const MAX_CUE_LEVEL = 3;                    // ED-27, RM-04

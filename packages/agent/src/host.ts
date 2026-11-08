@@ -130,6 +130,9 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
   return out;
 }
 
+/** Grader calibration notes shown next to a model in settings (eval/CALIBRATION-*.md; owner gate 2026-11-08). */
+export const GRADER_CALIBRATION: Record<string, string> = { "antigravity/gemini-3.8-flash": "fails calibration: lenient on weak answers" };
+
 /** Owner defaults (2026-11-08: flash first, terra over sol). User-selectable in settings; sol stays a supported choice; never a Claude model (owner M0). */
 export const DEFAULT_ROLE_MODELS: RoleModels = {
   planner: { provider: "openai-codex", model: "gpt-6.1-terra", reasoning: "low" }, // sol needed low to meet the 60 s deadline; terra not yet measured
