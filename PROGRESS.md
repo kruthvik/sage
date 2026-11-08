@@ -131,7 +131,10 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
   - `contrasting_cases` (two `cases` plus a rubric) goes to the grader, which now sees the cases.
   - The validator rejects bad columns and keys, and an ordering shown in its answer order.
   - All three render natively in the dev console (labelled selects, side-by-side cases).
-  - Evidence mapping (flag if wrong): ordering and matching count as recall/acquisition only; contrasting cases count as explanation/selection.
+  - Evidence (owner rule): ordering and matching count as acquisition only. Cram never requires acquisition, so they can't move the gate (tested, including a grade that overclaims every dimension).
+  - Contrasting cases are scored in `evidence.ts`, not from the grader's claim. Rubric criterion 0 is "names the difference / which case applies".
+    - Selection = criterion 0 met with no blocking flaw. This counts even if the attempt fails overall, which is a deliberate exception to "only passing attempts count" so that naming the case is credited.
+    - Explanation = a passing attempt with every criterion met and at least one reason criterion.
 - **scrap_work photos**:
   - `image.consent` stores 1–4 PNG/JPEG/WebP files (type checked from the bytes) in `data/blobs/`, and records the consent with the model name in the timeline.
   - The **transcriber** role (flash) proposes a transcription, which is shown with `transcription.review`.
@@ -156,8 +159,12 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - **Also:** `extensions.list` always carries the OS-privilege notice, and the `settings.get` capabilities registry shows calculate as available and graph/drawing as unavailable, each with a reason. The console has a Sources panel and vault/extensions controls.
 - **Limits found (flag):**
   - **YouTube** shares no captions without sign-in for the test video (TED, has captions). The page's track URL now needs a proof-of-origin token. Spoofing a mobile client was refused as bot-check circumvention, and Sage won't do it. So YouTube URLs fail with a clear message; uploading a .vtt/.srt file or a direct caption URL works.
-  - **PDF:** v3's text parser refuses xref/object streams (most PDFs since 1.5). Worse, it only reads the 14 standard fonts with ASCII text, so real lecture PDFs (embedded TrueType fonts) will practically always go to OCR, and OCR refuses PDFs over 12 pages (45 s cap). **Owner ask:** a real PDF text dependency (pdf.js via `unpdf`, ~2 MB, pure JS), or keep this and export long PDFs as text.
+  - **PDF (resolved 2026-11-08):** PDFs now go through pdf.js via **unpdf, loaded from pi-web-access's install** (`<SAGE_HOME>/agent/npm/node_modules/unpdf`, 1.x only). It runs in a worker with a 20 s deadline, no font eval, ≤ 500 pages and ≤ 2M chars, and handles TrueType, object streams and Unicode maths (tested on 15 pages). If unpdf is missing (`sage setup` not run), the old path below still applies. `settings.get` reports which reader is active. Old path: v3's text parser refuses xref/object streams (most PDFs since 1.5). Worse, it only reads the 14 standard fonts with ASCII text, so real lecture PDFs (embedded TrueType fonts) will practically always go to OCR, and OCR refuses PDFs over 12 pages (45 s cap). **Owner ask:** a real PDF text dependency (pdf.js via `unpdf`, ~2 MB, pure JS), or keep this and export long PDFs as text.
   - The generator's diagnostic, top-up and replacement calls don't get source excerpts yet; only the node bank does.
+
+### YouTube: open owner decision (2026-11-08)
+- The suggested example uses `youtube-transcript-plus` 2.0.3. It sends a desktop Chrome User-Agent and calls YouTube's internal player API as the **ANDROID** client (`clientName: 'ANDROID', clientVersion: '20.10.38'`) to get caption URLs without a proof-of-origin token.
+- That is the same technique this session's permission check refused as bot-check circumvention, so it isn't wired in. Uploading a .vtt/.srt file or a direct caption URL works.
 
 ## Research findings worth knowing
 
@@ -167,6 +174,12 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 ## Owner decisions
 
 (Answers to question batches go here, newest first. They override SPEC.md.)
+
+- **Follow-up (2026-11-08):**
+  - Ordering and matching count as **acquisition only, never recall**.
+  - Contrasting cases count as **selection** when the learner names the difference or which case applies, and as **explanation** only when the reason is given and the rubric is met.
+  - Add **unpdf**, reusing pi-web-access's copy.
+  - For YouTube, use the example in `C:\projects\playground\youtube` (open: see below).
 
 - **M6 batch (2026-11-08):**
   - Ship the PDF text, scan OCR and YouTube captions extractors.
@@ -217,7 +230,7 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
 2. **Owner:** M4 PDF maths: keep pdf-lib with ASCII spellings, embed a Unicode TTF you supply, or add Typst (new dependency).
-3. **Owner:** decide the PDF text dependency (see M6 limits). Then excerpts for diagnostic/top-up generation.
+3. **Owner:** YouTube (see below). Then source excerpts for diagnostic/top-up generation.
 
 ## Commands
 

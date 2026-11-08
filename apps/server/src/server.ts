@@ -14,6 +14,7 @@ import { usedMin } from "../../../packages/engine/src/pacing.ts";
 import { IMAGE_LIMITS, putImage } from "../../../packages/storage/src/blobs.ts";
 import { SourceStore } from "../../../packages/sources/src/store.ts";
 import { intakeFile, intakeText, intakeUrl, type Intake } from "../../../packages/sources/src/intake.ts";
+import { findUnpdf } from "../../../packages/sources/src/unpdf.ts";
 import { sagePackages } from "../../../packages/pi-adapter/src/update.ts";
 
 /** Capability registry (SPEC §16; owner M6: graph and drawing stay honestly unavailable in Phase 1). */
@@ -128,7 +129,9 @@ export function startServer(opts: ServeOptions) {
       case "research.pack": { const pk = driver(id!).state.packs.get(p.packId as string); if (!pk) throw new RpcError(ERR.params, "unknown pack"); return pk; }
       case "sources.acceptPack": return act({ type: "research_pack_accepted", packId: p.packId as string, ...(p.itemIds ? { itemIds: p.itemIds as string[] } : {}) });
       case "export.get": { const r = await driver(id!).exportNow("session"); return { ...r, sessionMd: readFileSync(join(r.dir, "session.md"), "utf8") }; }
-      case "settings.get": return { roleModels: readModels(), exportFontPath: readSettings().exportFontPath ?? null, vaultPath: readSettings().vaultPath ?? null, capabilities: CAPABILITIES, graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
+      case "settings.get": return { roleModels: readModels(), exportFontPath: readSettings().exportFontPath ?? null, vaultPath: readSettings().vaultPath ?? null, capabilities: [...CAPABILITIES, findUnpdf(opts.paths.agent)
+          ? { id: "pdf_text", available: true, note: "pdf.js (unpdf, the copy pi-web-access installed in Sage's agent dir)" }
+          : { id: "pdf_text", available: false, note: "unpdf not found (run sage setup); only simple standard-font PDFs give text, the rest go to local OCR (≤ 12 pages)" }], graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
       case "settings.set": {
         const rm = p.roleModels as Record<string, { provider?: unknown; model?: unknown }> | undefined;
         for (const [role, m] of Object.entries(rm ?? {})) if (!(role in DEFAULT_ROLE_MODELS) || typeof m?.provider !== "string" || typeof m?.model !== "string") throw new RpcError(ERR.params, `roleModels.${role} needs a known role with provider and model`);
@@ -164,7 +167,8 @@ export function startServer(opts: ServeOptions) {
             if (typeof p.name !== "string") throw new Error("name is required with dataBase64");
             const bytes = Buffer.from(p.dataBase64, "base64");
             if (bytes.length > 16 * 1024 * 1024) throw new Error("files must be 16 MB or less");
-            it = await intakeFile(p.name, bytes);
+            const unpdfEntry = findUnpdf(opts.paths.agent);
+            it = await intakeFile(p.name, bytes, undefined, unpdfEntry ? { unpdfEntry } : {});
           } else if (typeof p.url === "string") it = await intakeUrl(p.url);
           else if (typeof p.text === "string") it = intakeText(typeof p.title === "string" ? p.title : "Pasted notes", p.text);
           else if (typeof p.notePath === "string") {

@@ -54,8 +54,10 @@ export const primeFor = (mode: Mode, pace: Pace, s: Pick<SubSkill, "kind">) => (
 export const ACTIVITY_EVIDENCE: Record<string, Dimension[]> = {
   free_recall: ["recall", "acquisition"], explain_why: ["explanation"], apply_problem: ["execution", "changed_application"],
   conceptual_mcq: ["selection"], find_the_error: ["explanation", "selection"], method_choice: ["selection"], scrap_work: ["execution"],
-  // Library (owner chose these three for Phase 1). Ordering/matching are recognition of a structure, so recall/acquisition only.
-  ordering: ["recall", "acquisition"], matching: ["recall", "acquisition"], contrasting_cases: ["explanation", "selection"],
+  // Library (owner 2026-11-08): ordering/matching are recognition with the options in view, so acquisition only, never recall.
+  // contrasting_cases: selection when the learner names the difference / which case applies; explanation only when the reason is
+  // given and the whole rubric is met (enforced per attempt in evidence.ts, not trusted from the grader).
+  ordering: ["acquisition"], matching: ["acquisition"], contrasting_cases: ["selection", "explanation"],
 };
 
 // ED-29 (engineering estimate, 2026-11-07; recalibrate from real sessions): learner minutes per independent item by the

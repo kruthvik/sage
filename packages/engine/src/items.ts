@@ -78,6 +78,8 @@ export function validateItem(item: Item, opts: { chunk?: string; deliveredItemId
     if (k?.kind !== "match" || k.pairs.length !== c.length || new Set(k.pairs).size !== c.length || !k.pairs.every(i => Number.isInteger(i) && i >= 0 && i < t.length)) p.push("matching_key_invalid");
   }
   if (item.activityType === "contrasting_cases" && (item.cases?.length !== 2 || !item.cases.every(x => x.trim().length >= 12) || !item.rubric?.length)) p.push("contrasting_cases_invalid");
+  // Explanation needs a reason criterion after the identification criterion (rubric[0]).
+  if (item.activityType === "contrasting_cases" && item.evidences?.includes("explanation") && (item.rubric?.length ?? 0) < 2) p.push("contrasting_cases_explanation_needs_reason_criterion");
   if (!item.key && !item.rubric?.length) p.push("no_key_or_rubric");
   if (item.hints && leaksKey(item.hints[0], item)) p.push("nudge_answer_bearing");
   if (item.evidences?.includes("changed_application")) {

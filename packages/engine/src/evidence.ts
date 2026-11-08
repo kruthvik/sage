@@ -24,7 +24,9 @@ export interface EvidenceView { items: Map<string, Item>; attempts: Attempt[]; h
 /** Dimensions an attempt establishes for a subskill. Only independent, validated, passing, quote-backed attempts count (SPEC §8.1). */
 export function observedDims(a: Attempt, s: SubSkill, v: EvidenceView): Dimension[] {
   const item = v.items.get(a.itemId);
-  if (!item || !item.validated || !item.subskillIds.includes(s.id) || !a.independent || a.isRepair || !passed(a.grade)) return [];
+  if (!item || !item.validated || !item.subskillIds.includes(s.id) || !a.independent || a.isRepair || !a.grade) return [];
+  if (item.activityType === "contrasting_cases") return contrastDims(a, item);
+  if (!passed(a.grade)) return [];
   const dims = new Set(a.grade!.dimensionsObserved.filter(d => item.evidences.includes(d) && d !== "retention"));
   if (dims.has("changed_application")) {
     const vr = item.variation;
@@ -34,6 +36,17 @@ export function observedDims(a: Attempt, s: SubSkill, v: EvidenceView): Dimensio
   const prior = v.attempts.filter(x => x.at < a.at && v.items.get(x.itemId)?.subskillIds.includes(s.id)).at(-1);
   if (prior && Date.parse(a.at) - Date.parse(prior.at) >= RETENTION_MIN_DELAY_MS && (dims.has("recall") || dims.has("execution"))) dims.add("retention");
   return [...dims];
+}
+
+/** Contrasting cases (owner rule). Rubric criterion 0 is "names the difference / which case applies"; the rest are the reason.
+ * Selection: criterion 0 met and no blocking flaw (the attempt need not pass overall). Explanation: a passing attempt with every
+ * criterion met and at least one reason criterion. Whatever the grader claimed is ignored for this activity. */
+function contrastDims(a: Attempt, item: Item): Dimension[] {
+  const g = a.grade!, ce = g.criterionEvidence, blocking = g.flaws.some(f => f.severity === "blocking");
+  const out: Dimension[] = [];
+  if (ce[0]?.satisfied === true && !blocking) out.push("selection");
+  if (passed(g) && ce.length >= 2 && ce.every(c => c.satisfied === true)) out.push("explanation");
+  return out.filter(d => item.evidences.includes(d));
 }
 
 export interface GateResult { passed: boolean; stm: number; k: number; checks: number; families: number; missing: string[]; observed: Dimension[] }

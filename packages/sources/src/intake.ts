@@ -2,7 +2,8 @@
 // our own unzip; no Office/COM). Everything runs locally except fetching the caption URL the learner pasted.
 import { hash } from "../../storage/src/ledger.ts";
 import { extractPdfTextBounded } from "./pdf.ts";
-import { SourceSizeError } from "./limits.ts";
+import { SourceSizeError, sourceInputLimit } from "./limits.ts";
+import { extractPdfWithUnpdf } from "./unpdf.ts";
 import { extractRasterText } from "./raster.ts";
 import { extractOfficeText } from "./office.ts";
 import { fetchCaptionsFromUrl, fetchYoutubeCaptions, parseCaptions, youtubeId } from "./captions.ts";
@@ -18,17 +19,26 @@ export function textParts(text: string): Part[] {
   return out;
 }
 
-export async function intakeFile(name: string, bytes: Uint8Array, signal?: AbortSignal): Promise<Intake> {
+export async function intakeFile(name: string, bytes: Uint8Array, signal?: AbortSignal, opts: { unpdfEntry?: string } = {}): Promise<Intake> {
   const ext = (/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? "").toLowerCase(), contentHash = hash(bytes), title = name.replace(/\.[^.]+$/, ""), warnings: string[] = [];
   if (ext === "pdf") {
     let why = "This PDF had no text layer";
-    try {
+    if (bytes.length > sourceInputLimit()) throw new SourceSizeError("PDF exceeds the source size bound");
+    if (opts.unpdfEntry) {
+      // pdf.js (unpdf from pi-web-access): real fonts, object streams, Unicode. A page with no text is an image page.
+      const r = await extractPdfWithUnpdf(bytes, opts.unpdfEntry, signal);
+      const parts = r.pages.filter(p => p.text).map(p => ({ locator: `p${p.pageNumber}`, text: p.text }));
+      if (parts.length) {
+        const blank = r.totalPages - parts.length;
+        return { title, kind: "pdf", method: "unpdf-pdfjs-v1", parts, contentHash, warnings: blank ? [`${blank} of ${r.totalPages} pages had no text (scanned or image-only pages); upload those as images to read them by OCR.`] : [] };
+      }
+    } else try {
       const r = await extractPdfTextBounded(bytes, { ...(signal ? { signal } : {}) });
       const parts = r.pages.filter(p => p.text.trim()).map(p => ({ locator: `p${p.pageNumber}`, text: p.text }));
       if (parts.length) return { title, kind: "pdf", method: "pdf-text-v1", parts, contentHash, warnings };
     } catch (e) {
       if (e instanceof SourceSizeError || signal?.aborted) throw e; // size decisions never fall back to OCR (v3)
-      // shortcut: v3's text parser refuses xref/object streams (most PDFs since 1.5); those go to OCR (≤ 12 pages). Upgrade: resolve objects via pdf-lib's parser.
+      // Fallback only when unpdf isn't installed: v3's parser reads standard-font ASCII PDFs without object streams; the rest go to OCR (≤ 12 pages).
       why = "Sage's PDF text reader can't parse this PDF's structure";
     }
     const o = await extractRasterText(bytes, "application/pdf", signal);
