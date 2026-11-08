@@ -31,7 +31,7 @@ test("bad token, foreign origin and non-loopback host are refused", async () => 
 test("params are validated, reserved methods answer not_implemented, unknown methods are refused", async () => {
   const c = client(); await c.open;
   expect((await c.rpc("session.create", { goal: { objective: 5 } })).error?.code).toBe(ERR.params);
-  expect((await c.rpc("extensions.list", {})).error?.code).toBe(ERR.notImplemented);
+  expect((await c.rpc("brain.get", {})).error?.code).toBe(ERR.notImplemented);
   expect((await c.rpc("grade.receive", {})).error?.code).toBe(ERR.method);
   c.ws.close();
 });
@@ -85,5 +85,39 @@ test("scrap_work photo: consent stores it, the transcriber proposes text, only t
   expect((await a.rpc("transcription.confirm", { sessionId, text: "x^2 + 2x = 8, so x = 2" })).error).toBeUndefined();
   const st = (await a.rpc("state.get", { sessionId })).result as { timeline: { kind: string; text: string }[] };
   expect(st.timeline.some(t => t.kind === "consent" && t.text.includes("antigravity/gemini-3.8-flash"))).toBe(true);
+  a.ws.close();
+});
+
+test("sources: review → accept with consent gates use; removal blocks it; extensions carry the privilege warning", async () => {
+  const a = client(); await a.open;
+  const added = (await a.rpc("sources.add", { title: "Bio notes", text: "The Krebs cycle runs in the mitochondrial matrix.\nGlycolysis happens in the cytoplasm." })).result;
+  expect(added.status).toBe("needs_review");
+  const goal = { objective: "Pass bio", timeBudgetMin: 30, sourceIds: [added.sourceId] };
+  expect((await a.rpc("session.create", { goal })).error?.code).toBe(ERR.params); // not accepted yet
+  expect((await a.rpc("sources.preview", { sourceId: added.sourceId })).result.excerpts[0].locator).toBe("L1–2");
+  await a.rpc("sources.accept", { sourceId: added.sourceId, shareWithModels: false });
+  expect((await a.rpc("session.create", { goal })).error?.code).toBe(ERR.params); // accepted without consent to share
+  await a.rpc("sources.accept", { sourceId: added.sourceId, shareWithModels: true });
+  expect((await a.rpc("session.create", { goal })).error).toBeUndefined();
+  await a.rpc("sources.remove", { sourceId: added.sourceId });
+  expect((await a.rpc("session.create", { goal })).error?.code).toBe(ERR.params);
+  expect((await a.rpc("sources.add", { url: "http://127.0.0.1/cap.vtt" })).error?.code).toBe(ERR.params); // private address refused
+  expect((await a.rpc("extensions.list")).result.notice).toContain("OS privileges");
+  const caps = (await a.rpc("settings.get")).result.capabilities as { id: string; available: boolean }[];
+  expect(caps.find(c => c.id === "graph")?.available).toBe(false);
+  a.ws.close();
+});
+
+test("with a vault set, exports go to <vault>/Sage with frontmatter and wikilinks, and a user's own folder is never reused", async () => {
+  const vault = await mkdtemp(join(tmpdir(), "vault-"));
+  const a = client(); await a.open;
+  expect((await a.rpc("settings.set", { vaultPath: "relative/path" })).error?.code).toBe(ERR.params);
+  expect((await a.rpc("settings.set", { vaultPath: vault })).result.vaultPath).toBe(vault);
+  const sessionId = (await a.rpc("session.create", { goal: { objective: "Vault test", timeBudgetMin: 30 } })).result.sessionId;
+  await a.until(() => a.events.some(e => e.event === "plan.changed" && (e as { sessionId?: string }).sessionId !== undefined));
+  const ex = (await a.rpc("export.get", { sessionId })).result as { dir: string; sessionMd: string };
+  expect(ex.dir.startsWith(join(vault, "Sage"))).toBe(true);
+  expect(ex.sessionMd.startsWith("---\nsage_session:")).toBe(true);
+  await a.rpc("settings.set", { vaultPath: null });
   a.ws.close();
 });

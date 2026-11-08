@@ -19,6 +19,8 @@ export interface HostDeps {
   signal?: AbortSignal;
   /** Stored learner photos by hash (scrap_work); absent ⇒ the transcriber role is unavailable. */
   readImage?: (hash: string) => { data: string; mimeType: string };
+  /** Learner sources (accepted + consented only; the store enforces it). Excerpts are untrusted data in prompts. */
+  sources?: { excerpts(ids: string[], query: string, k?: number): { spanId: string; title: string; locator: string; text: string }[]; outline(ids: string[]): string };
 }
 export interface HostEvent { event: EngineEvent; actor: "role" | "host" }
 type CallRole = Extract<Effect, { kind: "call_role" }>;
@@ -63,13 +65,18 @@ export async function runRole(fx: CallRole, s: EngineState, deps: HostDeps, seq:
 
   switch (fx.role) {
     case "planner": {
-      const plan = await call("planner", PLANNER_SYSTEM, plannerUser(s.goal), parsePlan);
+      const outline = deps.sources?.outline(s.goal.sourceIds ?? []);
+      const plan = await call("planner", PLANNER_SYSTEM, plannerUser(s.goal, outline ? { sourceOutline: outline } : {}), parsePlan);
       out.push({ actor: "role", event: { type: "plan_proposed", plan } });
       break;
     }
     case "generator": {
       if (fx.purpose === "node") {
         const n = fx.input.node as PlanNode;
+        const src = fx.input.sources as { learner: string[]; research: unknown[] } | undefined;
+        // Learner source ids → the best-matching excerpts for this node; generator items cite their spanIds in sourceSpans.
+        if (src && deps.sources) fx = { ...fx, input: { ...fx.input, sources: { learner: deps.sources.excerpts(src.learner, [n.title, ...(n.subskills ?? []).map(x => x.statement)].join(" "), 8)
+          .map(e => ({ spanId: e.spanId, source: e.title, locator: e.locator, text: e.text })), research: src.research } } };
         const batches = await Promise.all(BANK_SPLIT.map(([partition, count], k) => call("generator", GENERATOR_SYSTEM,
           generatorUser({ ...fx.input, size: undefined, partition, count, note: `Write exactly ${count} ${partition} items.${partition !== "teaching" && ["cram", "accelerate", "learn"].includes(s.goal?.mode)
             ? ` This mode requires transfer: for each subskill, include one apply_problem with evidences ["changed_application"] and a variation whose baselineItemId is another item id in this same reply, changing context, representation, format or structure (not only surface).` : ""}` }),
@@ -156,6 +163,6 @@ export const DEFAULT_ROLE_MODELS: RoleModels = {
   feynman: { provider: "antigravity", model: "gemini-3.8-flash" },
   summarizer: { provider: "antigravity", model: "gemini-3.8-flash" },
   researcher: { provider: "antigravity", model: "gemini-3.8-flash" },
-  checker: { provider: "antigravity", model: "gemini-3.8-flash" },
-  transcriber: { provider: "antigravity", model: "gemini-3.8-flash" },            // owner M5: flash reads scrap_work photos; the learner confirms the text                // blind key check (owner: cheap model where code can't calculate)
+  checker: { provider: "antigravity", model: "gemini-3.8-flash" },                // blind key check (owner: cheap model where code can't calculate)
+  transcriber: { provider: "antigravity", model: "gemini-3.8-flash" },            // owner M5: flash reads scrap_work photos; the learner confirms the text
 };

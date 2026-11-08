@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { EngineState } from "../../engine/src/state.ts";
-import { cheatsheetMd, itemsMd, lessonMd, planMd, sessionCheatsheetMd, sessionMd, slug, type ExportMeta, type LogEntry } from "./render.ts";
+import { cheatsheetMd, itemsMd, lessonMd, nodeDir, planMd, sessionCheatsheetMd, sessionMd, slug, type ExportMeta, type LogEntry } from "./render.ts";
 import { exportMarkdownPdf } from "./pdf.ts";
 
 export type ExportWhat = "session" | "node" | "final";
@@ -55,7 +55,7 @@ export async function writeExports(home: string, s: EngineState, log: LogEntry[]
   const nodes = [...(s.plan?.nodes ?? [])].sort((a, b) => a.order - b.order);
   for (const n of nodes) {
     if (!s.attempts.some(a => s.items.get(a.itemId)?.nodeId === n.id) && n.status !== "passed") continue; // nothing to show yet
-    const nd = `nodes/${String(n.order + 1).padStart(2, "0")}-${slug(n.title)}`;
+    const nd = nodeDir(n);
     put(`${nd}/lesson.md`, lessonMd(log, n));
     put(`${nd}/items.md`, itemsMd(s, n));
     const sheet = cheatsheetMd(s, n);

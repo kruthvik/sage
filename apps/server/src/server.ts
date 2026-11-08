@@ -2,8 +2,8 @@
 // Security: binds 127.0.0.1 only; Host and Origin must be loopback on this port (blocks DNS rebinding and cross-site pages);
 // the launch token is compared in constant time. Only learner-owned engine events can come from a client (F10, via the driver).
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Ledger } from "../../../packages/storage/src/ledger.ts";
 import { SessionDriver, type DriverRuntime, type ServerEvent } from "../../../packages/agent/src/driver.ts";
@@ -12,6 +12,16 @@ import { buildPacket } from "../../../packages/agent/src/packet.ts";
 import { EngineError, replay } from "../../../packages/engine/src/loop.ts";
 import { usedMin } from "../../../packages/engine/src/pacing.ts";
 import { IMAGE_LIMITS, putImage } from "../../../packages/storage/src/blobs.ts";
+import { SourceStore } from "../../../packages/sources/src/store.ts";
+import { intakeFile, intakeText, intakeUrl, type Intake } from "../../../packages/sources/src/intake.ts";
+import { sagePackages } from "../../../packages/pi-adapter/src/update.ts";
+
+/** Capability registry (SPEC §16; owner M6: graph and drawing stay honestly unavailable in Phase 1). */
+const CAPABILITIES = [
+  { id: "calculate", available: true, note: "numeric answers are checked in code (final value, with tolerance); answer keys are cross-checked by the checker role" },
+  { id: "graph", available: false, note: "not in Phase 1: no plotting yet, so items don't ask you to draw or read a graph Sage would render" },
+  { id: "drawing", available: false, note: "not in Phase 1 (Excalidraw would be a large dependency); photograph paper working instead (scrap_work)" },
+];
 import type { EngineEvent } from "../../../packages/engine/src/state.ts";
 import type { Goal, ResponseInput } from "../../../packages/core/src/types.ts";
 import type { SagePaths } from "../../../packages/pi-adapter/src/sdk.ts";
@@ -38,9 +48,12 @@ export function startServer(opts: ServeOptions) {
   const usageFile = join(opts.paths.home, "data", "usage.json");
   const usageOn = () => { try { return JSON.parse(readFileSync(usageFile, "utf8")).enabled !== false; } catch { return true; } };
   const writeJson = (f: string, v: unknown) => { mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, JSON.stringify(v, null, 2)); };
-  const readSettings = (): { roleModels?: Partial<RoleModels>; exportFontPath?: string } => { try { return JSON.parse(readFileSync(settingsFile, "utf8")); } catch { return {}; } };
+  const readSettings = (): { roleModels?: Partial<RoleModels>; exportFontPath?: string; vaultPath?: string } => { try { return JSON.parse(readFileSync(settingsFile, "utf8")); } catch { return {}; } };
   const readModels = (): RoleModels => ({ ...DEFAULT_ROLE_MODELS, ...readSettings().roleModels });
-  const wire = (d: SessionDriver) => { d.exportsHome = opts.paths.home; d.exportFontPath = readSettings().exportFontPath; d.blobsDir = join(opts.paths.home, "data", "blobs"); return d; };
+  const sources = new SourceStore(ledger, opts.now);
+  // Obsidian (owner M6): with a vault set, session folders are written under <vault>/Sage/ (frontmatter + [[wikilinks]]); never over user notes.
+  const exportsRoot = (vault = readSettings().vaultPath) => vault ? join(vault, "Sage") : opts.paths.home;
+  const wire = (d: SessionDriver) => { const st = readSettings(); d.exportsHome = exportsRoot(st.vaultPath); d.obsidian = !!st.vaultPath; d.exportFontPath = st.exportFontPath; d.blobsDir = join(opts.paths.home, "data", "blobs"); d.sources = sources; return d; };
   const drivers = new Map<string, SessionDriver>();
   const leases = new Map<string, string>(); // sessionId → conn id
   const sockets = new Map<string, ServerWebSocket<Conn>>();
@@ -72,6 +85,9 @@ export function startServer(opts: ServeOptions) {
 
     switch (method) {
       case "session.create": {
+        const ids = ((p.goal as Partial<Goal>).sourceIds ?? []) as string[], usable = new Set(sources.usable(ids).map(r => r.sourceId));
+        const blocked = ids.filter(x => !usable.has(x));
+        if (blocked.length) throw new RpcError(ERR.params, `sources not usable (accept them with shareWithModels first, and not removed): ${blocked.join(", ")}`);
         const sessionId = randomUUID();
         const d = SessionDriver.create(defaultsFor(p.goal as Partial<Goal>), sessionId, ledger, opts.rt, readModels(), broadcast, opts.now);
         wire(d); drivers.set(sessionId, d); lease(c, sessionId);
@@ -112,17 +128,19 @@ export function startServer(opts: ServeOptions) {
       case "research.pack": { const pk = driver(id!).state.packs.get(p.packId as string); if (!pk) throw new RpcError(ERR.params, "unknown pack"); return pk; }
       case "sources.acceptPack": return act({ type: "research_pack_accepted", packId: p.packId as string, ...(p.itemIds ? { itemIds: p.itemIds as string[] } : {}) });
       case "export.get": { const r = await driver(id!).exportNow("session"); return { ...r, sessionMd: readFileSync(join(r.dir, "session.md"), "utf8") }; }
-      case "settings.get": return { roleModels: readModels(), exportFontPath: readSettings().exportFontPath ?? null, graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
+      case "settings.get": return { roleModels: readModels(), exportFontPath: readSettings().exportFontPath ?? null, vaultPath: readSettings().vaultPath ?? null, capabilities: CAPABILITIES, graderCalibration: GRADER_CALIBRATION, apiVersion: API_VERSION };
       case "settings.set": {
         const rm = p.roleModels as Record<string, { provider?: unknown; model?: unknown }> | undefined;
         for (const [role, m] of Object.entries(rm ?? {})) if (!(role in DEFAULT_ROLE_MODELS) || typeof m?.provider !== "string" || typeof m?.model !== "string") throw new RpcError(ERR.params, `roleModels.${role} needs a known role with provider and model`);
         const fp = p.exportFontPath;
         if (fp !== undefined && fp !== null && !(typeof fp === "string" && /\.(ttf|otf)$/i.test(fp) && existsSync(fp))) throw new RpcError(ERR.params, "exportFontPath must be an existing local .ttf/.otf file (or null to use the built-in font)");
+        const vp = p.vaultPath;
+        if (vp !== undefined && vp !== null && !(typeof vp === "string" && isAbsolute(vp) && existsSync(vp) && statSync(vp).isDirectory())) throw new RpcError(ERR.params, "vaultPath must be an existing absolute folder (your Obsidian vault), or null");
         const next = { ...readModels(), ...rm } as RoleModels;
-        const cur = readSettings(), exportFontPath = fp === undefined ? cur.exportFontPath : fp ?? undefined;
-        writeJson(settingsFile, { ...cur, roleModels: next, exportFontPath });
-        for (const d of drivers.values()) { d.models = next; d.exportFontPath = exportFontPath; }
-        return { roleModels: next, exportFontPath: exportFontPath ?? null };
+        const cur = readSettings(), exportFontPath = fp === undefined ? cur.exportFontPath : fp ?? undefined, vaultPath = vp === undefined ? cur.vaultPath : vp ?? undefined;
+        writeJson(settingsFile, { ...cur, roleModels: next, exportFontPath, vaultPath });
+        for (const d of drivers.values()) { d.models = next; d.exportFontPath = exportFontPath; d.exportsHome = exportsRoot(vaultPath); d.obsidian = !!vaultPath; }
+        return { roleModels: next, exportFontPath: exportFontPath ?? null, vaultPath: vaultPath ?? null };
       }
       case "image.consent": {
         const imgs = p.images as { dataBase64: string }[];
@@ -139,6 +157,31 @@ export function startServer(opts: ServeOptions) {
         const latencyMs = typeof p.latencyMs === "number" ? p.latencyMs : cur ? Date.now() - Date.parse(cur.presentedAt) : 0;
         return act({ type: "transcription_confirmed", text: p.text as string, responseEventId: randomUUID(), latencyMs: Math.max(0, latencyMs) });
       }
+      case "sources.add": {
+        let it: Intake;
+        try {
+          if (typeof p.dataBase64 === "string") {
+            if (typeof p.name !== "string") throw new Error("name is required with dataBase64");
+            const bytes = Buffer.from(p.dataBase64, "base64");
+            if (bytes.length > 16 * 1024 * 1024) throw new Error("files must be 16 MB or less");
+            it = await intakeFile(p.name, bytes);
+          } else if (typeof p.url === "string") it = await intakeUrl(p.url);
+          else if (typeof p.text === "string") it = intakeText(typeof p.title === "string" ? p.title : "Pasted notes", p.text);
+          else if (typeof p.notePath === "string") {
+            const vault = readSettings().vaultPath;
+            if (!vault) throw new Error("set settings.vaultPath to import Obsidian notes");
+            const full = resolve(vault, p.notePath), rel = relative(vault, full);
+            if (rel.startsWith("..") || isAbsolute(rel) || !/\.md$/i.test(full)) throw new Error("notePath must be a .md file inside the vault");
+            it = { ...intakeText(basename(full, ".md"), readFileSync(full, "utf8")), kind: "note", method: "obsidian-note-v1" }; // read only; Sage never writes to user notes
+          } else throw new Error("give a file (name + dataBase64), a url, text, or a notePath");
+        } catch (e) { throw new RpcError(ERR.params, (e as Error).message); }
+        return sources.add({ ...it, ...(p.examSample === true ? { examSample: true } : {}) });
+      }
+      case "sources.preview": { const rec = sources.get(p.sourceId as string); if (!rec) throw new RpcError(ERR.params, "unknown source"); return { ...rec, excerpts: sources.spans(rec.sourceId).slice(0, 60), untrusted: "excerpts are the source's text, shown as data" }; }
+      case "sources.accept": try { return sources.accept(p.sourceId as string, p.shareWithModels as boolean); } catch (e) { throw new RpcError(ERR.params, (e as Error).message); }
+      case "sources.remove": try { return sources.remove(p.sourceId as string); } catch (e) { throw new RpcError(ERR.params, (e as Error).message); }
+      case "sources.list": return sources.list();
+      case "extensions.list": return { packages: await sagePackages(opts.paths), notice: "pi extensions run with your OS privileges. Sage's isolated home is not a sandbox." };
       case "usage.get": {
         if (id) return driver(id).state.spend;
         if (!usageOn()) return { enabled: false };
@@ -166,7 +209,7 @@ export function startServer(opts: ServeOptions) {
       return new Response("not found", { status: 404 });
     },
     websocket: {
-      maxPayloadLength: 24 * 1024 * 1024, // photo intake: ≤ 12 MB of images as base64 plus JSON
+      maxPayloadLength: 24 * 1024 * 1024, // photo intake (≤ 12 MB images) and source files (≤ 16 MB) as base64 plus JSON
       open(ws) { sockets.set(ws.data.id, ws); },
       close(ws) { sockets.delete(ws.data.id); for (const [s, h] of leases) if (h === ws.data.id) leases.delete(s); },
       async message(ws, raw): Promise<void> {

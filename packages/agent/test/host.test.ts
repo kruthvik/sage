@@ -31,3 +31,14 @@ test("a malformed grade is retried once, then the grade carries the attempt id; 
   expect(g.grade.dimensionsObserved).toEqual([]);
   expect(output?.name).toBe("submit_grade"); // schema-constrained output (flash broke free-form JSON)
 });
+
+test("learner source ids reach the generator as excerpts with span ids, and the planner as an outline", async () => {
+  const users: string[] = [];
+  const roleCall = async (i: RoleCallInput) => { users.push(i.user); return reply(i.system.startsWith("You plan") || i.user.includes("Learner goal") ? JSON.stringify({ nodes: [] }) : JSON.stringify({ items: [] })); };
+  const sources = { excerpts: (ids: string[]) => ids.map(id => ({ spanId: `${id}:1`, title: "Lecture 3", locator: "p4", text: "The Krebs cycle runs in the mitochondrial matrix." })), outline: (ids: string[]) => ids.length ? "Lecture 3 (pdf): Krebs cycle" : "" };
+  await runRole({ kind: "call_role", role: "generator", purpose: "node", input: { node: { id: "n1", title: "Respiration", subskills: [] }, sources: { learner: ["src_a"], research: [] } } }, initialState(), { models, roleCall, researchCall: roleCall, sources }, 1);
+  expect(users[0]).toContain("src_a:1"); expect(users[0]).toContain("mitochondrial matrix");
+  const s = { ...initialState(), goal: { objective: "Pass bio", mode: "cram", pace: "normal", sourceIds: ["src_a"], preview: {} } } as never;
+  await runRole({ kind: "call_role", role: "planner", purpose: "plan", input: {} }, s, { models, roleCall, researchCall: roleCall, sources }, 2).catch(() => []);
+  expect(users.some(u => u.includes("Outline of the learner's sources") && u.includes("Krebs cycle"))).toBe(true);
+});

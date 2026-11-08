@@ -8,7 +8,10 @@ import { passed } from "../../engine/src/items.ts";
 import { RETENTION_MIN_DELAY_MS } from "../../engine/src/pedagogy.config.ts";
 
 export interface LogEntry { event: EngineEvent; now: string }
-export interface ExportMeta { models?: Record<string, { provider: string; model: string }>; fontPath?: string }
+export interface ExportMeta { models?: Record<string, { provider: string; model: string }>; fontPath?: string; /** Writing into an Obsidian vault: YAML frontmatter + [[wikilinks]]. */ obsidian?: boolean }
+/** A node's folder inside the session folder (shared by the writer and the wikilinks). */
+export const nodeDir = (n: PlanNode) => `nodes/${String(n.order + 1).padStart(2, "0")}-${slug(n.title)}`;
+const yaml = (v: string) => JSON.stringify(v); // a JSON string is a valid YAML scalar
 
 /** Learner and model text is data: keep it on one line and out of table syntax. */
 const cell = (t: unknown) => String(t ?? "").replace(/\s+/g, " ").replace(/\|/g, "\\|").trim();
@@ -59,6 +62,8 @@ export function sessionMd(s: EngineState, meta: ExportMeta = {}): string {
   const lat = graded.map(a => a.latencyMs).sort((a, b) => a - b), median = lat.length ? lat[Math.floor(lat.length / 2)]! : 0;
   const cost = s.spend.costUsd === "unknown" ? "unknown" : `$${s.spend.costUsd.toFixed(2)}`;
   return [
+    ...(meta.obsidian ? ["---", `sage_session: ${yaml(s.sessionId)}`, `objective: ${yaml(s.goal.objective)}`, `mode: ${s.goal.mode}`, `date: ${(s.timeline[0]?.at ?? "").slice(0, 10)}`,
+      `nodes_passed: ${m.nodesPassedInBudget}/${m.nodesTotal}`, "tags: [sage, sage/session]", "---", ""] : []),
     `# ${cell(s.goal.objective)}`, "",
     `Mode ${s.goal.mode} · pace ${s.goal.pace} · budget ${s.goal.timeBudgetMin ?? "none"} min · used ${m.usedMin} min${s.goal.exam ? ` · exam: ${cell(JSON.stringify(s.goal.exam))}` : ""}`,
     `Models: ${models}`, "",
@@ -69,7 +74,7 @@ export function sessionMd(s: EngineState, meta: ExportMeta = {}): string {
     `- Cost per session-hour: ${m.costPerHourUsd === "unknown" ? "unknown" : `$${m.costPerHourUsd}`}`, "",
     "## Plan", "",
     "| # | Node | Status | Short-term mastery by subskill |", "|---|---|---|---|",
-    ...nodes.map(n => `| ${n.order + 1} | ${cell(n.title)} | ${n.status} | ${nodeStm(s, n)} |`), "",
+    ...nodes.map(n => `| ${n.order + 1} | ${meta.obsidian ? `[[${nodeDir(n)}/cheatsheet\\|${cell(n.title).replace(/[[\]|#^]/g, "")}]]` : cell(n.title)} | ${n.status} | ${nodeStm(s, n)} |`), "",
     "## Now", "",
     `- Node: ${active ? cell(active.title) : "none"} · phase ${s.phase}${s.stopped ? " (stopped)" : ""}`,
     `- Next intended move: ${cell(s.nextIntendedMove) || "—"}`,

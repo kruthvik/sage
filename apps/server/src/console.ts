@@ -22,6 +22,18 @@ button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 <button class="primary" onclick="create()">Create Cram session</button>
 <select id="sessions" onchange="resume(this.value)"><option value="">resume a session…</option></select>
 </section>
+<section><h2>Your sources</h2>
+<p class="mute">Checked sources are used by the next session you create. Nothing is sent to a model unless you accept it with "share excerpts with the models".</p>
+<label>File (pdf, docx, pptx, png/jpg scan, vtt/srt, txt/md) <input type="file" id="srcfile"></label>
+<label>or a YouTube / .vtt URL <input id="srcurl" type="url" placeholder="https://www.youtube.com/watch?v=…"></label>
+<label><input type="checkbox" id="srcexam"> This is a past exam</label>
+<button onclick="addSource()">Add source</button>
+<div id="srclist"></div>
+<details><summary>Obsidian vault and extensions</summary>
+<label>Vault folder (absolute path) <input id="vault" placeholder="C:\\Users\\you\\Documents\\Vault"></label><button onclick="setVault()">Save vault</button>
+<button onclick="rpc('extensions.list',{}).then(v=>log((v.packages.map(p=>typeof p==='string'?p:p.source).join(', ')||'no extensions')+'. '+v.notice))">Show extensions</button>
+</details>
+</section>
 <section><h2>Session</h2><div id="stage"><div class="mute">No session yet.</div></div>
 <div id="answer" hidden><textarea id="resp" rows="4" placeholder="Your answer"></textarea>
 <button class="primary" onclick="submit()">Submit</button><button onclick="call('hint.request',{level:1})">Hint 1</button><button onclick="call('hint.request',{level:2})">Hint 2</button><button onclick="call('hint.request',{level:3})">Hint 3</button><button onclick="call('chunk.peek')">Peek chunk</button></div>
@@ -56,7 +68,20 @@ function show(ev,d){const st=$('stage');const box=h=>{const div=document.createE
  if(ev==='plan.changed')call('plan.get').then(p=>p&&box('<b>Plan</b><ol>'+p.nodes.map(n=>'<li>'+esc(n.title)+' <span class="mute">('+n.estMinutes+' min; '+n.subskills.map(x=>esc(x.statement)).join('; ')+')</span></li>').join('')+'</ol>'));
  if(ev==='plan.fit'&&!d.fits){fit=d;box('<b>Plan does not fit the time</b><p>'+esc(d.text)+'</p><button onclick="extend()">Extend to '+d.estMin+' min</button><button onclick="merge()">Merge nodes</button><button onclick="speed()">Start in Speed-up</button>')}
 }
-async function create(){const r=await rpc('session.create',{goal:{objective:$('obj').value,mode:'cram',timeBudgetMin:+$('mins').value}}).catch(e=>log(e.message,'err'));if(r){sid=r.sessionId;log('session '+sid)}}
+const picked=()=>[...document.querySelectorAll('input.srcuse:checked')].map(x=>x.value);
+async function sources(){const l=await rpc('sources.list',{}).catch(()=>[]);const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ $('srclist').innerHTML=l.filter(s=>s.status!=='removed').map(s=>'<div class="ev"><label><input type="checkbox" class="srcuse" value="'+esc(s.sourceId)+'"'+(s.status==='accepted'&&s.shareWithModels?'':' disabled')+'> <b>'+esc(s.title)+'</b></label> <span class="mute">'+esc(s.kind)+(s.examSample?', past exam':'')+' · '+s.spans+' spans · '+esc(s.status)+(s.status==='accepted'&&!s.shareWithModels?' (not shared)':'')+'</span>'
+  +(s.warnings.length?'<p class="mute">'+s.warnings.map(esc).join(' ')+'</p>':'')
+  +' <button data-id="'+esc(s.sourceId)+'" onclick="preview(this.dataset.id)">Preview</button>'+(s.status!=='accepted'||!s.shareWithModels?' <button data-id="'+esc(s.sourceId)+'" onclick="acceptSrc(this.dataset.id)">Accept and share excerpts with the models</button>':'')+' <button data-id="'+esc(s.sourceId)+'" onclick="removeSrc(this.dataset.id)">Remove</button></div>').join('')||'<p class="mute">No sources yet.</p>'}
+async function addSource(){const f=$('srcfile').files[0],u=$('srcurl').value.trim(),exam=$('srcexam').checked?{examSample:true}:{};
+ const b64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
+ const p=f?{name:f.name,dataBase64:await b64(f),...exam}:u?{url:u,...exam}:null;if(!p)return log('Choose a file or paste a URL.','err');log('Reading '+(f?f.name:u)+'…');
+ await rpc('sources.add',p).then(s=>log('Added "'+s.title+'" ('+s.spans+' spans). Preview it, then accept.')).catch(e=>log(e.message,'err'));$('srcfile').value='';$('srcurl').value='';sources()}
+const preview=id=>rpc('sources.preview',{sourceId:id}).then(v=>log(v.title+'\\n\\n'+v.excerpts.slice(0,8).map(e=>'['+e.locator+'] '+e.text).join('\\n\\n'))).catch(e=>log(e.message,'err'));
+const acceptSrc=id=>{if(confirm('Excerpts of this source will be sent to the planner and generator models when a session uses it. Accept and share?'))rpc('sources.accept',{sourceId:id,shareWithModels:true}).then(sources).catch(e=>log(e.message,'err'))};
+const removeSrc=id=>{if(confirm('Remove this source? Sage will not use it again.'))rpc('sources.remove',{sourceId:id}).then(sources).catch(e=>log(e.message,'err'))};
+const setVault=()=>rpc('settings.set',{vaultPath:$('vault').value.trim()||null}).then(v=>log(v.vaultPath?'Exports now go to '+v.vaultPath+'\\Sage (your notes are never overwritten)':'Vault cleared; exports go to SAGE_HOME')).catch(e=>log(e.message,'err'));
+async function create(){const r=await rpc('session.create',{goal:{objective:$('obj').value,mode:'cram',timeBudgetMin:+$('mins').value,...(picked().length?{sourceIds:picked()}:{})}}).catch(e=>log(e.message,'err'));if(r){sid=r.sessionId;log('session '+sid)}}
 async function resume(id){if(!id)return;sid=id;await rpc('session.resume',{sessionId:id,takeLease:true}).then(()=>state()).catch(e=>log(e.message,'err'))}
 const submit=()=>{call('item.submit',{text:$('resp').value});$('resp').value='';$('answer').hidden=true};
 const choose=i=>{call('item.submit',{choice:i});$('answer').hidden=true};
@@ -70,7 +95,7 @@ const confirmTr=b=>{const t=b.closest('div').querySelector('textarea.tr').value;
 const ack=()=>feedback&&call('feedback.ack',{attemptId:feedback}).then(()=>feedback=null);
 const state=()=>call('state.get');
 const exp=()=>call('export.get').then(v=>v&&log('Exported to '+v.dir+(v.userEdited.length?' (kept your edits: '+v.userEdited.join(', ')+')':'')+'\\n\\n'+v.sessionMd.slice(0,6000)));
-ws.addEventListener('open',()=>{rpc('usage.get',{}).then(v=>{$('usage').checked=v.enabled!==false}).catch(()=>{});rpc('settings.get',{}).then(v=>{const m=v.roleModels.transcriber;if(m)tmodel=m.provider+'/'+m.model}).catch(()=>{})});
+ws.addEventListener('open',()=>{rpc('usage.get',{}).then(v=>{$('usage').checked=v.enabled!==false}).catch(()=>{});rpc('settings.get',{}).then(v=>{const m=v.roleModels.transcriber;if(m)tmodel=m.provider+'/'+m.model;if(v.vaultPath)$('vault').value=v.vaultPath}).catch(()=>{});sources()});
 const extend=()=>call('time.extend',{minutes:fit.estMin-fit.budgetMin}),speed=()=>call('pace.set',{pace:'speed_up'});
 async function merge(){for(const g of fit.mergeGroups)await call('plan.merge',{nodeIds:g})}
 function dispute(){if(!lastAttempt)return log('nothing to dispute','err');const a=prompt('Why is the grade or answer key wrong?');if(a)call('grade.dispute',{attemptId:lastAttempt,argument:a})}

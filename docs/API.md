@@ -41,8 +41,8 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `research.status` | sessionId | read |  |
 | `research.pack` | sessionId, packId | read |  |
 | `sources.acceptPack` | sessionId, packId, itemIds? | learner (lease) |  |
-| `settings.get` | — | read | returns `roleModels` and `graderCalibration` (`provider/model` → calibration note, e.g. flash: "fails calibration: lenient on weak answers") |
-| `settings.set` | roleModels?, exportFontPath? (string or null) | learner (lease) | `exportFontPath`: a local .ttf/.otf you have embedding rights for, used in PDF exports. Copy it into a plain folder such as `SAGE_HOME/fonts/`: system fonts (`C:Windowsonts`) are hard-linked and refused. null = built-in font (maths symbols printed as ascii). |
+| `settings.get` | — | read | `roleModels`, `graderCalibration` (`provider/model` → calibration note, e.g. flash: "fails calibration: lenient on weak answers"), `exportFontPath`, `vaultPath`, `capabilities` (calculate available; graph and drawing unavailable in Phase 1, each with the reason) |
+| `settings.set` | roleModels?, exportFontPath? (string or null), vaultPath? (string or null) | learner (lease) | `exportFontPath`: a local .ttf/.otf you have embedding rights for, used in PDF exports. Copy it into a plain folder such as `SAGE_HOME/fonts/`: system fonts (`C:Windowsonts`) are hard-linked and refused. null = built-in font (maths symbols printed as ascii). `vaultPath`: your Obsidian vault (absolute folder). Session folders are then written to `<vault>/Sage/sessions/` with YAML frontmatter and [[wikilinks]]; Sage never writes over a file it didn't write, and never reuses a folder it doesn't own. |
 | `usage.get` | sessionId? | read | With sessionId: that session's spend. Without: `{enabled, sessions, hours, calls}`, or `{enabled:false}` when counters are off. |
 
 ## Reserved in v1 (answer `1003` until their milestone)
@@ -53,15 +53,15 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `image.consent` | sessionId, images: [{dataBase64}] | learner (lease) | scrap_work photos. Calling it **is** the learner's per-message consent to send these photos to the transcriber model (default flash), so the client must name the model and ask first. 1–4 PNG/JPEG/WebP (checked from the bytes), ≤ 5 MB each, ≤ 12 MB total; stored locally in `data/blobs/`. Emits `transcription.review`. |
 | `transcription.confirm` | sessionId, text, latencyMs? | learner (lease) | The learner's checked (optionally edited) transcription. It becomes their response and is graded; the attempt records which photos it came from. |
 | `export.get` | sessionId | read | regenerates the session folder (`SAGE_HOME/sessions/<date>-<topic>/`) from the ledger; returns `{dir, written, unchanged, userEdited, pdfs, errors, sessionMd}`. Files the learner edited are never overwritten (listed in `userEdited`). |
-| `sources.add` | — | learner (lease) | M6 |
-| `sources.preview` | — | read | M6 |
-| `sources.accept` | — | learner (lease) | M6 |
-| `sources.remove` | — | learner (lease) | M6 |
-| `sources.list` | — | read | M6 |
+| `sources.add` | one of {name, dataBase64} · {url} · {title, text} · {notePath}; examSample? | learner | Files ≤ 16 MB: .pdf (text layer; scans and PDFs Sage can't parse go to local Windows OCR, ≤ 12 pages), .docx/.pptx (read from the XML, no Office needed), .png/.jpg (local OCR), .vtt/.srt, .txt/.md. `url`: a YouTube video (its public captions; YouTube often refuses without sign-in, and Sage says so) or a direct .vtt/.srt URL; only that URL is fetched, and private addresses are refused. `notePath`: a .md inside `vaultPath`, read only. Returns the source in `needs_review`. |
+| `sources.preview` | sourceId | read | The record and its first 60 spans `{spanId, locator, text}` (p3, ¶12, slide 4, L1–40, 00:01:02–00:01:09). Excerpts are the source's text, so show them as data. |
+| `sources.accept` | sourceId, shareWithModels | learner | `shareWithModels` is the learner's consent to send excerpts to the planner and generator models. `session.create` refuses `goal.sourceIds` that aren't accepted with it. |
+| `sources.remove` | sourceId | learner | Blocks all future use (it can't be re-accepted; add it again to review a fresh copy). Past sessions keep their history. |
+| `sources.list` | — | read | Current revision of every source. |
 | `brain.get` | — | read | Phase 2 |
 | `brain.set` | — | learner (lease) | Phase 2 |
 | `usage.set` | enabled: boolean | learner | Local usage counters on/off (on by default; nothing is uploaded). |
-| `extensions.list` | — | read | M6 |
+| `extensions.list` | — | read | `{packages, notice}`: pi packages in Sage's own agent dir. The notice is always shown: extensions run with your OS privileges, and Sage's isolated home is not a sandbox. |
 | `extensions.install` | — | learner (lease) | M6 |
 | `extensions.enable` | — | learner (lease) | M6 |
 | `extensions.disable` | — | learner (lease) | M6 |

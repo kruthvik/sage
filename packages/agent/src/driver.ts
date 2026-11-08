@@ -10,7 +10,7 @@ import type { Ledger } from "../../storage/src/ledger.ts";
 import { writeExports, type ExportResult, type ExportWhat } from "../../exports/src/writer.ts";
 import type { Goal } from "../../core/src/types.ts";
 import type { RoleCallInput, RoleCallResult, TutorTurnResult, TutorTool } from "../../pi-adapter/src/runtime.ts";
-import { runRole, type RoleModels } from "./host.ts";
+import { runRole, type HostDeps, type RoleModels } from "./host.ts";
 import { runTutorTurn } from "./tutor.ts";
 
 export interface DriverRuntime {
@@ -34,6 +34,9 @@ export class SessionDriver {
   exportFontPath?: string;
   /** SAGE_HOME/data/blobs: learner photos for scrap_work (read by the transcriber role after consent). */
   blobsDir?: string;
+  sources?: HostDeps["sources"];
+  /** Exports go into an Obsidian vault: add frontmatter and [[wikilinks]]. */
+  obsidian?: boolean;
 
   constructor(readonly sessionId: string, private ledger: Ledger, private rt: DriverRuntime, public models: RoleModels,
     private emit: (e: ServerEvent) => void, private now: () => string = () => new Date().toISOString()) {}
@@ -109,7 +112,7 @@ export class SessionDriver {
   /** Regenerate the session folder from the ledger now (export.get, node close, session end). Never overwrites files the learner edited. */
   async exportNow(what: ExportWhat = "session"): Promise<ExportResult> {
     if (!this.exportsHome) throw new Error("no SAGE_HOME set for exports");
-    return writeExports(this.exportsHome, this.state, this.ledger.engineLog(this.sessionId), what, { models: this.models, fontPath: this.exportFontPath });
+    return writeExports(this.exportsHome, this.state, this.ledger.engineLog(this.sessionId), what, { models: this.models, fontPath: this.exportFontPath, obsidian: this.obsidian });
   }
   private out(event: string, data: unknown) { this.emit({ event, sessionId: this.sessionId, data }); }
 
@@ -119,7 +122,7 @@ export class SessionDriver {
         const run = async () => {
           for (let attempt = 0; ; attempt++) {
             try {
-              const evs = await runRole(fx, this.state, { models: this.models, roleCall: this.rt.roleCall, researchCall: this.rt.researchCall, signal: this.abort.signal, ...(this.blobsDir ? { readImage: (h: string) => readImage(this.blobsDir!, h) } : {}) }, ++this.seq);
+              const evs = await runRole(fx, this.state, { models: this.models, roleCall: this.rt.roleCall, researchCall: this.rt.researchCall, signal: this.abort.signal, ...(this.blobsDir ? { readImage: (h: string) => readImage(this.blobsDir!, h) } : {}), ...(this.sources ? { sources: this.sources } : {}) }, ++this.seq);
               const rejected = evs.map(e => this.apply(e.event, e.actor)).filter((x): x is string => !!x);
               if (rejected.length) throw new Error(`role output rejected: ${rejected.join("; ")}`); // same retry-then-park path as a failed call
               return;

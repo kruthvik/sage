@@ -20,7 +20,7 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 | M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
 | M4 Exports | **done** (PDF maths font question open; see M4 below) | `bun test` 94 pass · `tsc` clean |
 | M5 Activities ◆ | **done** (owner batch answered 2026-11-08) | `bun test` 102 pass · `tsc` clean · live flash vision probe |
-| M6 Integrations | not started | |
+| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 111 pass · `tsc` clean · local OCR verified on Windows |
 
 M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechanisms, 27 engineering defaults), `docs/DESIGN.md`, `docs/LIBRARY_CANDIDATES.md`.
 
@@ -140,6 +140,25 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
   - Live probe (`packages/eval/experiments/vision-probe.ts`): flash transcribed a 3-line working exactly and kept the learner's sign error. Cost $0.0002, 3.5 s.
 - Not built (owner M5): plot/param sims, labeling/concept maps, the `---js` module and the DSL port.
 
+### M6: what exists (2026-11-08)
+- **`packages/sources`:**
+  - Ported from v3: PDF text, Windows-OCR raster and captions (SSRF-safe pinned DNS).
+  - New: `office.ts`, a bounded ZIP reader with ZIP-bomb ratio/size caps that gives docx paragraphs and pptx slides.
+  - `intake.ts` routes files and URLs to these extractors. `store.ts` holds sources as immutable `object_revision` + `source_span` rows in the ledger, with a derived FTS5 index (`source_fts`; SCHEMA_VERSION unchanged).
+- **Source lifecycle:**
+  - A new source is `needs_review`. `sources.accept` with `shareWithModels` is the learner's consent to send excerpts.
+  - `session.create` refuses sources that aren't accepted with that consent, or that were removed. Removal blocks reuse.
+  - The planner gets an outline; the generator gets the best FTS excerpts per node, with span ids to cite. Excerpts are always DATA blocks in prompts.
+- **Obsidian:** `settings.vaultPath`.
+  - Exports go to `<vault>/Sage/sessions/…` with YAML frontmatter and `[[…/cheatsheet\|title]]` links.
+  - Note import is `sources.add {notePath}` (read only, path confined to the vault).
+  - A folder Sage didn't create is never reused, and user-edited files are never overwritten (manifest hashes).
+- **Also:** `extensions.list` always carries the OS-privilege notice, and the `settings.get` capabilities registry shows calculate as available and graph/drawing as unavailable, each with a reason. The console has a Sources panel and vault/extensions controls.
+- **Limits found (flag):**
+  - **YouTube** shares no captions without sign-in for the test video (TED, has captions). The page's track URL now needs a proof-of-origin token. Spoofing a mobile client was refused as bot-check circumvention, and Sage won't do it. So YouTube URLs fail with a clear message; uploading a .vtt/.srt file or a direct caption URL works.
+  - **PDF:** v3's text parser refuses xref/object streams (most PDFs since 1.5). Those fall back to local OCR (≤ 12 pages) with a warning. Upgrade: resolve objects with pdf-lib's parser (already a dependency).
+  - The generator's diagnostic, top-up and replacement calls don't get source excerpts yet; only the node bank does.
+
 ## Research findings worth knowing
 
 - Nothing in `outputs/` contradicts a spec mechanism.
@@ -148,6 +167,13 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 ## Owner decisions
 
 (Answers to question batches go here, newest first. They override SPEC.md.)
+
+- **M6 batch (2026-11-08):**
+  - Ship the PDF text, scan OCR and YouTube captions extractors.
+  - **No Office/COM.** docx/pptx are read with our own unzip plus XML text.
+  - Search is **lexical only** (FTS5): no Ollama, EmbeddingGemma or sqlite-vec.
+  - Obsidian is a `vaultPath` setting only; no path is set yet.
+  - Graph and drawing capabilities are honestly **unavailable**.
 
 - **M5 batch (2026-11-08):**
   - Library activities for Phase 1 are ordering, matching and contrasting cases. Plot/param sims and labeling/concept maps are deferred.
@@ -191,7 +217,7 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
 2. **Owner:** M4 PDF maths: keep pdf-lib with ASCII spellings, embed a Unicode TTF you supply, or add Typst (new dependency).
-3. M6 Integrations: Obsidian, video ingest, sources/PDF extraction, Ollama embeddings. Large or networked deps need your OK; questions come first.
+3. PDF object streams through pdf-lib (so lecture PDFs over 12 pages keep their text), then excerpts for diagnostic/top-up generation.
 
 ## Commands
 
