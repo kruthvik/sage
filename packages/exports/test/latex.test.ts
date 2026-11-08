@@ -13,5 +13,5 @@ test("common maths LaTeX prints as Unicode", () => {
 });
 
 test("prose is left alone: dollar amounts, paths, identifiers", () => {
-  for (const s of ["costs $500 and $200", String.raw`C:\Users\kruth\notes`, "node_check and a_b", "Assets = Liabilities + Equity, $5,000 = $0 + $5,000"]) expect(L(s)).toBe(s);
+  for (const s of ["costs $500 and $200", String.raw`D:\Course\notes`, "node_check and a_b", "Assets = Liabilities + Equity, $5,000 = $0 + $5,000"]) expect(L(s)).toBe(s);
 });
