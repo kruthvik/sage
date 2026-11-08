@@ -48,16 +48,39 @@ function mathToUnicode(m: string, subscripts: boolean): string {
   return subscripts ? s.replace(/(?<!\\)[{}]/g, "") : s;
 }
 
-/** Text of one PDF block → text with LaTeX maths shown as Unicode. Code blocks are not passed through this. */
-export function latexToUnicode(text: string): string {
-  const isMath = (x: string) => /\\[a-zA-Z]|[\^_{]/.test(x);
+export { mathToUnicode };
+export interface MathSpan { tex: string; display: boolean }
+const isMath = (x: string) => /\\[a-zA-Z]|[\^_{]/.test(x);
+const DELIM = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|(?<![\\$\p{N}])\$([^$\n]+?)\$(?!\p{N})/gu;
+
+/** Splits prose into text and delimited maths ($$…$$ and \[…\] are display; \(…\) and $…$ inline). A $…$ pair is maths only when
+ * it holds a command, ^, _ or braces, so "$500 and $200" stays text; the scan then resumes one character on, so a dollar amount
+ * can't swallow the opening $ of real maths later in the line. */
+export function splitMath(text: string): (string | MathSpan)[] {
+  const out: (string | MathSpan)[] = []; let last = 0, m: RegExpExecArray | null;
+  DELIM.lastIndex = 0;
+  while ((m = DELIM.exec(text))) {
+    const inline = m[4];
+    if (inline !== undefined && !isMath(inline)) { DELIM.lastIndex = m.index + 1; continue; }
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push({ tex: (m[1] ?? m[2] ?? m[3] ?? inline!).trim(), display: m[1] !== undefined || m[2] !== undefined });
+    last = DELIM.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// A bare command counts as maths only when it isn't glued to a path or word: "x \to y" converts, "C:\pi" and "notes\to" don't.
+const BARE = String.raw`(?<![\p{L}\p{N}_:.\\/~-])`;
+/** Undelimited prose: models often skip the $, so known commands and x^2 still convert; anything else is left alone. */
+export function bareToUnicode(text: string): string {
   return text
-    .replace(/\$\$([\s\S]+?)\$\$/g, (w, x: string) => isMath(x) ? mathToUnicode(x.trim(), true) : w)
-    .replace(/\\\[([\s\S]+?)\\\]/g, (_, x: string) => mathToUnicode(x.trim(), true))
-    .replace(/\\\(([\s\S]+?)\\\)/g, (_, x: string) => mathToUnicode(x.trim(), true))
-    .replace(/(?<![\\$\p{N}])\$([^$\n]+?)\$(?!\p{N})/gu, (w, x: string) => isMath(x) ? mathToUnicode(x.trim(), true) : w)
-    // Bare commands outside delimiters (models often skip the $): convert known ones, leave anything else (e.g. C:\Users) alone.
-    .replace(/\\(?:[dt]?frac|sqrt)\b[^\n]*/g, seg => mathToUnicode(seg, false))
-    .replace(/\\([a-zA-Z]+)(?![a-zA-Z])/g, (whole, name: string) => SYM[name] ?? whole)
+    .replace(new RegExp(String.raw`${BARE}\\(?:[dt]?frac|sqrt)\b[^\n]*`, "gu"), seg => mathToUnicode(seg, false))
+    .replace(new RegExp(String.raw`${BARE}\\([a-zA-Z]+)(?![a-zA-Z])`, "gu"), (whole, name: string) => SYM[name] ?? whole)
     .replace(/(?<=[\p{L}\p{N})])\^(\{[^{}\n]*\}|[\p{N}]+|[a-zA-Z](?![a-zA-Z]))/gu, (_, x: string) => script(x.replace(/^\{|\}$/g, ""), SUP, "^"));
+}
+
+/** Text of one PDF block → text with LaTeX maths shown as Unicode (the linear fallback when typesetting is unavailable). */
+export function latexToUnicode(text: string): string {
+  return splitMath(text).map(p => typeof p === "string" ? bareToUnicode(p) : mathToUnicode(p.tex, true)).join("");
 }
