@@ -44,6 +44,8 @@ function handle(s: EngineState, ev: EngineEvent, now: string, fx: Effect[]): voi
       fx.push({ kind: "call_role", role: "planner", purpose: "plan", input: { goal: ev.goal } });
       if (!ev.goal.sourceIds?.length) research(s, "intake", "intake", { objective: ev.goal.objective }, fx);
       if (ev.goal.exam?.name) research(s, `exam:${ev.goal.exam.name}`, "exam", { exam: ev.goal.exam }, fx);
+      for (const v of ev.goal.videoSources ?? []) research(s, `video:${v.url}`, "video_transcript", { video: v,
+        question: "Look for an official transcript of this video on the publisher's own website (the channel owner's site). YouTube itself and third-party transcript sites don't count. If there isn't one, return a single unsourced item saying so." }, fx);
       return;
     }
     case "plan_proposed": case "plan_edited": {

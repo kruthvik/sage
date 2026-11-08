@@ -20,7 +20,7 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 | M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
 | M4 Exports | **done** (PDF maths font question open; see M4 below) | `bun test` 94 pass · `tsc` clean |
 | M5 Activities ◆ | **done** (owner batch answered 2026-11-08) | `bun test` 102 pass · `tsc` clean · live flash vision probe |
-| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 111 pass · `tsc` clean · local Tesseract OCR verified; PDF text dependency is an open owner ask |
+| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 123 pass, 1 skipped (real YouTube paste fixture pending) · `tsc` clean · local Tesseract OCR verified |
 
 M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechanisms, 27 engineering defaults), `docs/DESIGN.md`, `docs/LIBRARY_CANDIDATES.md`.
 
@@ -158,13 +158,9 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
   - A folder Sage didn't create is never reused, and user-edited files are never overwritten (manifest hashes).
 - **Also:** `extensions.list` always carries the OS-privilege notice, and the `settings.get` capabilities registry shows calculate as available and graph/drawing as unavailable, each with a reason. The console has a Sources panel and vault/extensions controls.
 - **Limits found (flag):**
-  - **YouTube** shares no captions without sign-in for the test video (TED, has captions). The page's track URL now needs a proof-of-origin token. Spoofing a mobile client was refused as bot-check circumvention, and Sage won't do it. So YouTube URLs fail with a clear message; uploading a .vtt/.srt file or a direct caption URL works.
+  - **YouTube (resolved 2026-11-08):** paste only. Sage never fetches from YouTube (watch pages and caption endpoints are refused), and uses no internal-API library and no yt-dlp. Adding a YouTube URL in the console shows the instruction and a paste box. The parser reads the "Show transcript" layout: timestamp lines, optional screen-reader duration labels, optional chapter headings, and inline `0:00 text`. Spans cite `watch?v=<id>&t=<s>s` and are shown with feedback. The researcher may look for the publisher's own transcript. A .vtt/.srt upload and direct caption URLs still work. **Not yet tested on a real 30-minute paste:** the test runs once the owner puts one in `packages/sources/test/fixtures/local/youtube-transcript.txt` (URL on line 1; gitignored).
   - **PDF (resolved 2026-11-08):** PDFs now go through pdf.js via **unpdf, loaded from pi-web-access's install** (`<SAGE_HOME>/agent/npm/node_modules/unpdf`, 1.x only). It runs in a worker with a 20 s deadline, no font eval, ≤ 500 pages and ≤ 2M chars, and handles TrueType, object streams and Unicode maths (tested on 15 pages). If unpdf is missing (`sage setup` not run), the old path below still applies. `settings.get` reports which reader is active. Old path: v3's text parser refuses xref/object streams (most PDFs since 1.5). Worse, it only reads the 14 standard fonts with ASCII text, so real lecture PDFs (embedded TrueType fonts) will practically always go to OCR, and OCR refuses PDFs over 12 pages (45 s cap). **Owner ask:** a real PDF text dependency (pdf.js via `unpdf`, ~2 MB, pure JS), or keep this and export long PDFs as text.
   - The generator's diagnostic, top-up and replacement calls don't get source excerpts yet; only the node bank does.
-
-### YouTube: open owner decision (2026-11-08)
-- The suggested example uses `youtube-transcript-plus` 2.0.3. It sends a desktop Chrome User-Agent and calls YouTube's internal player API as the **ANDROID** client (`clientName: 'ANDROID', clientVersion: '20.10.38'`) to get caption URLs without a proof-of-origin token.
-- That is the same technique this session's permission check refused as bot-check circumvention, so it isn't wired in. Uploading a .vtt/.srt file or a direct caption URL works.
 
 ## Research findings worth knowing
 
@@ -179,7 +175,7 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
   - Ordering and matching count as **acquisition only, never recall**.
   - Contrasting cases count as **selection** when the learner names the difference or which case applies, and as **explanation** only when the reason is given and the rubric is met.
   - Add **unpdf**, reusing pi-web-access's copy.
-  - For YouTube, use the example in `C:\projects\playground\youtube` (open: see below).
+  - For YouTube, use the example in `C:\projects\playground\youtube`. It turned out to use YouTube's internal player API as the ANDROID client, so it was declined. **Owner (2026-11-08):** no YouTube internal-API libraries and no yt-dlp. Instead, paste the transcript and link citations to URL&t=<s>s. The researcher may look for the publisher's own transcript. whisper.cpp is deferred.
 
 - **M6 batch (2026-11-08):**
   - Ship the PDF text, scan OCR and YouTube captions extractors.
@@ -230,7 +226,7 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
 2. **Owner:** M4 PDF maths: keep pdf-lib with ASCII spellings, embed a Unicode TTF you supply, or add Typst (new dependency).
-3. **Owner:** YouTube (see below). Then source excerpts for diagnostic/top-up generation.
+3. **Owner:** paste one real 30+ minute YouTube transcript into `packages/sources/test/fixtures/local/youtube-transcript.txt` (URL on line 1) and run `bun test packages/sources`. Then source excerpts for diagnostic/top-up generation.
 
 ## Commands
 

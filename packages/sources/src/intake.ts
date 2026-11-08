@@ -1,12 +1,14 @@
-// One entry point from a learner's file / URL / pasted text to extracted parts (owner M6: PDF, OCR, YouTube captions, Office via
-// our own unzip; no Office/COM). Everything runs locally except fetching the caption URL the learner pasted.
+// One entry point from a learner's file / URL / pasted text to extracted parts (owner M6: PDF, OCR, captions, Office via our own
+// unzip; no Office/COM). Everything runs locally except fetching a direct caption-file URL the learner pasted. YouTube transcripts
+// come in by paste only (owner 2026-11-08: no YouTube internal API, no yt-dlp).
 import { hash } from "../../storage/src/ledger.ts";
 import { extractPdfTextBounded } from "./pdf.ts";
 import { SourceSizeError, sourceInputLimit } from "./limits.ts";
 import { extractPdfWithUnpdf } from "./unpdf.ts";
 import { extractRasterText } from "./raster.ts";
 import { extractOfficeText } from "./office.ts";
-import { fetchCaptionsFromUrl, fetchYoutubeCaptions, parseCaptions, youtubeId } from "./captions.ts";
+import { fetchCaptionsFromUrl, parseCaptions, youtubeId } from "./captions.ts";
+import { YOUTUBE_PASTE_HINT, parseYoutubeTranscript, transcriptParts, youtubeWatchUrl } from "./transcript.ts";
 import { sniffImage } from "../../storage/src/blobs.ts";
 import type { Part, SourceKind } from "./store.ts";
 
@@ -59,18 +61,28 @@ export async function intakeFile(name: string, bytes: Uint8Array, signal?: Abort
   throw new Error("supported: .pdf, .docx, .pptx, .png/.jpg scans, .vtt/.srt captions, .txt/.md");
 }
 
-/** A YouTube video URL, or a direct .vtt/.srt caption URL. Only that URL (and the caption file it names) is fetched. */
+/** A direct .vtt/.srt caption URL; only that URL is fetched. A YouTube URL needs the pasted transcript (intakeTranscript). */
 export async function intakeUrl(url: string, signal?: AbortSignal): Promise<Intake> {
-  if (youtubeId(url)) {
-    const c = await fetchYoutubeCaptions(url, { ...(signal ? { signal } : {}) });
-    const p = parseCaptions(c.text, "vtt");
-    return { title: `YouTube ${c.videoId} (${c.trackName})`, kind: "captions", method: "youtube-captions-v1", url, parts: p.cues.map(q => ({ locator: q.locator, text: q.text })), contentHash: hash(c.original), warnings: [] };
-  }
+  if (youtubeId(url)) throw new Error(`YouTube videos are added with their transcript: ${YOUTUBE_PASTE_HINT}.`);
+  // No YouTube endpoint is ever fetched, including caption URLs copied from it (owner 2026-11-08).
+  if (/(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com|googlevideo\.com|ytimg\.com)$/i.test(URL.canParse(url) ? new URL(url).hostname : "")) throw new Error(`Sage doesn't fetch from YouTube. ${YOUTUBE_PASTE_HINT}, with the video URL.`);
   const c = await fetchCaptionsFromUrl(url, { ...(signal ? { signal } : {}) });
   const p = parseCaptions(c.text, c.format);
   return { title: new URL(url).pathname.split("/").pop() || url, kind: "captions", method: "captions-url-v1", url, parts: p.cues.map(q => ({ locator: q.locator, text: q.text })), contentHash: hash(c.original), warnings: [] };
 }
 
+/** A YouTube URL plus the transcript the learner copied from "Show transcript". Nothing is fetched. */
+export function intakeTranscript(url: string, text: string, title?: string): Intake {
+  const watch = youtubeWatchUrl(url);
+  if (!watch) throw new Error("not a YouTube video URL (https://www.youtube.com/watch?v=… or https://youtu.be/…)");
+  const segs = parseYoutubeTranscript(text);
+  if (!segs) throw new Error(`That doesn't look like a YouTube transcript (timestamp lines followed by text). ${YOUTUBE_PASTE_HINT}.`);
+  return { title: title?.trim() || `YouTube ${youtubeId(url)}`, kind: "captions", method: "youtube-paste-v1", url: watch, parts: transcriptParts(segs),
+    contentHash: hash(`${watch}\n${text}`), warnings: [] };
+}
+
 export function intakeText(title: string, text: string): Intake {
+  const segs = parseYoutubeTranscript(text); // a transcript pasted without its URL still gets timestamped spans (no links)
+  if (segs) return { title, kind: "captions", method: "transcript-paste-v1", parts: transcriptParts(segs), contentHash: hash(text), warnings: ["Timestamps kept; add the video URL to get links to each moment."] };
   return { title, kind: "text", method: "pasted-v1", parts: textParts(text), contentHash: hash(text), warnings: [] };
 }

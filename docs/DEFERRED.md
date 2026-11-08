@@ -10,6 +10,7 @@ Parked by owner decision (2026-11-07: "short-term learning first"). The data mod
 | Learn mode extras (more representations, slower fading, review schedule at end) | preset values only | `pedagogy.config.ts` |
 | Drill extras (error-type report beyond the basic one, continuous mixed rounds UI) | preset values only | exports |
 | Accelerate extras (diagnostic ≤12 min UX) | test-out rule implemented | engine |
+| whisper.cpp local transcription of the learner's own audio/video files | not built; YouTube uses a pasted transcript, and .vtt/.srt files are read directly | sources intake (a local whisper.cpp binary + model, run as a bounded subprocess; nothing uploaded) |
 | Voice recall | `ResponseInput.audio_transcript` shape only | activities |
 | General-purpose tutor subagents | rejected; the only subagent is `researcher` | – |
 | `ui-bridge.ts` (pi extension UI → client) | missing; pi's no-op UI is used, so headless works but extensions that need UI (dialogs, prompts, widgets) don't. The original goal was "pi without the TUI, extensions keep working" (owner, 2026-11-08: revisit when the GUI phase starts) | `pi-adapter` + `ui.respond` in API.md |

@@ -24,6 +24,9 @@ export interface Goal {
   exam?: ExamBlueprint; allowedAids: string[]; accommodations?: string; learnerParams?: string; preview: LearningPreview;
   /** Learner-attached, accepted sources. They outrank anything the researcher finds. */
   sourceIds?: string[];
+  /** Set by the host (never the client) from the attached sources that are YouTube videos: the researcher may look for the
+   * publisher's own official transcript (owner 2026-11-08). */
+  videoSources?: { sourceId: string; title: string; url: string }[];
 }
 
 /** declarative ⇒ recall-type; procedural ⇒ execution-type (SPEC §10 "by subskill type"). */
@@ -129,4 +132,4 @@ export interface SourcePackItem {
   id: string; title: string; url?: string; citation?: string; relevance: string; spans: string[]; reliability: string;
   nodeId?: string; conflictsWithSourceId?: string; unsourced?: boolean;
 }
-export interface SourcePack { id: string; trigger: "intake" | "node_uncovered" | "low_confidence" | "exam" | "tutor_request"; nodeId?: string; question?: string; items: SourcePackItem[]; status: "pending" | "accepted" | "partially_accepted" | "declined"; acceptedItemIds: string[] }
+export interface SourcePack { id: string; trigger: "intake" | "node_uncovered" | "low_confidence" | "exam" | "tutor_request" | "video_transcript"; nodeId?: string; question?: string; items: SourcePackItem[]; status: "pending" | "accepted" | "partially_accepted" | "declined"; acceptedItemIds: string[] }

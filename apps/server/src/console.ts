@@ -25,7 +25,8 @@ button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 <section><h2>Your sources</h2>
 <p class="mute">Checked sources are used by the next session you create. Nothing is sent to a model unless you accept it with "share excerpts with the models".</p>
 <label>File (pdf, docx, pptx, png/jpg scan, vtt/srt, txt/md) <input type="file" id="srcfile"></label>
-<label>or a YouTube / .vtt URL <input id="srcurl" type="url" placeholder="https://www.youtube.com/watch?v=…"></label>
+<label>or a YouTube video / .vtt or .srt file URL <input id="srcurl" type="url" placeholder="https://www.youtube.com/watch?v=…" oninput="ytCheck()"></label>
+<div id="ytpaste" hidden><p>On YouTube, click Show transcript under the description, select all, copy, paste here</p><textarea id="srctr" rows="6" aria-label="Pasted YouTube transcript"></textarea></div>
 <label><input type="checkbox" id="srcexam"> This is a past exam</label>
 <button onclick="addSource()">Add source</button>
 <div id="srclist"></div>
@@ -61,7 +62,8 @@ function show(ev,d){const st=$('stage');const box=h=>{const div=document.createE
   box('<b>'+esc(t)+'</b>'+(d.cueText?'<p><i>'+esc(d.cueText)+'</i></p>':'')+'<p>'+esc(it.stem)+'</p>'+cases+body+(slots?'<p><button class="primary" onclick="seq(this)">Submit</button></p>':'')
    +(t==='scrap_work'?'<p><label>Photo of your working <input type="file" class="photo" accept="image/png,image/jpeg,image/webp" multiple></label> <button onclick="photo(this)">Send photo</button> <span class="mute">or type your working below</span></p>':''))}
  if(ev==='transcription.review')box('<b>Check the transcription</b><p>Fix anything that was misread. Only the text you confirm is graded.</p><textarea class="tr" rows="8" aria-label="Transcription of your working">'+esc(d.text)+'</textarea><p><button class="primary" onclick="confirmTr(this)">Confirm and submit</button></p>');
- if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>')}
+ if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;const q=s=>esc(s).replace(/"/g,'&quot;');
+  box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>'+((d.citations||[]).length?'<p class="mute">Source: '+d.citations.map(c=>c.link?'<a href="'+q(c.link)+'" target="_blank" rel="noopener noreferrer">'+esc(c.title+' '+c.locator)+'</a>':esc(c.title+' '+c.locator)).join('; ')+'</p>':''))}
  if(ev==='repair.required')box('<b>Fix this first</b><ul>'+d.flaws.map(f=>'<li>"'+esc(f.quote)+'": '+esc(f.problem)+'</li>').join('')+'</ul>');
  if(ev==='hint.reveal')box('<b>Hint</b><p>'+esc(d.text)+'</p>');
  if(ev==='plan.changed'||ev==='notice'||ev==='pace.notice'||ev==='research.ready')box('<i>'+esc(d.text)+'</i>');
@@ -75,9 +77,12 @@ async function sources(){const l=await rpc('sources.list',{}).catch(()=>[]);cons
   +' <button data-id="'+esc(s.sourceId)+'" onclick="preview(this.dataset.id)">Preview</button>'+(s.status!=='accepted'||!s.shareWithModels?' <button data-id="'+esc(s.sourceId)+'" onclick="acceptSrc(this.dataset.id)">Accept and share excerpts with the models</button>':'')+' <button data-id="'+esc(s.sourceId)+'" onclick="removeSrc(this.dataset.id)">Remove</button></div>').join('')||'<p class="mute">No sources yet.</p>'}
 async function addSource(){const f=$('srcfile').files[0],u=$('srcurl').value.trim(),exam=$('srcexam').checked?{examSample:true}:{};
  const b64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
- const p=f?{name:f.name,dataBase64:await b64(f),...exam}:u?{url:u,...exam}:null;if(!p)return log('Choose a file or paste a URL.','err');log('Reading '+(f?f.name:u)+'…');
- await rpc('sources.add',p).then(s=>log('Added "'+s.title+'" ('+s.spans+' spans). Preview it, then accept.')).catch(e=>log(e.message,'err'));$('srcfile').value='';$('srcurl').value='';sources()}
-const preview=id=>rpc('sources.preview',{sourceId:id}).then(v=>log(v.title+'\\n\\n'+v.excerpts.slice(0,8).map(e=>'['+e.locator+'] '+e.text).join('\\n\\n'))).catch(e=>log(e.message,'err'));
+ const tr=$('srctr').value;if(!f&&u&&isYt(u)&&!tr.trim())return log('On YouTube, click Show transcript under the description, select all, copy, paste here.','err');
+ const p=f?{name:f.name,dataBase64:await b64(f),...exam}:u?{url:u,...(isYt(u)?{transcript:tr}:{}),...exam}:null;if(!p)return log('Choose a file or paste a URL.','err');log('Reading '+(f?f.name:u)+'…');
+ await rpc('sources.add',p).then(s=>log('Added "'+s.title+'" ('+s.spans+' spans). Preview it, then accept.')).catch(e=>log(e.message,'err'));$('srcfile').value='';$('srcurl').value='';$('srctr').value='';ytCheck();sources()}
+const isYt=u=>{try{return ['youtube.com','www.youtube.com','m.youtube.com','youtu.be'].includes(new URL(u).hostname)}catch{return false}};
+const ytCheck=()=>{$('ytpaste').hidden=!isYt($('srcurl').value.trim())};
+const preview=id=>rpc('sources.preview',{sourceId:id}).then(v=>log(v.title+'\\n\\n'+v.excerpts.slice(0,8).map(e=>'['+e.locator+(e.link?' '+e.link:'')+'] '+e.text).join('\\n\\n'))).catch(e=>log(e.message,'err'));
 const acceptSrc=id=>{if(confirm('Excerpts of this source will be sent to the planner and generator models when a session uses it. Accept and share?'))rpc('sources.accept',{sourceId:id,shareWithModels:true}).then(sources).catch(e=>log(e.message,'err'))};
 const removeSrc=id=>{if(confirm('Remove this source? Sage will not use it again.'))rpc('sources.remove',{sourceId:id}).then(sources).catch(e=>log(e.message,'err'))};
 const setVault=()=>rpc('settings.set',{vaultPath:$('vault').value.trim()||null}).then(v=>log(v.vaultPath?'Exports now go to '+v.vaultPath+'\\Sage (your notes are never overwritten)':'Vault cleared; exports go to SAGE_HOME')).catch(e=>log(e.message,'err'));

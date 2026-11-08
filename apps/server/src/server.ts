@@ -13,7 +13,8 @@ import { EngineError, replay } from "../../../packages/engine/src/loop.ts";
 import { usedMin } from "../../../packages/engine/src/pacing.ts";
 import { IMAGE_LIMITS, putImage } from "../../../packages/storage/src/blobs.ts";
 import { SourceStore } from "../../../packages/sources/src/store.ts";
-import { intakeFile, intakeText, intakeUrl, type Intake } from "../../../packages/sources/src/intake.ts";
+import { intakeFile, intakeText, intakeTranscript, intakeUrl, type Intake } from "../../../packages/sources/src/intake.ts";
+import { youtubeId } from "../../../packages/sources/src/captions.ts";
 import { findUnpdf } from "../../../packages/sources/src/unpdf.ts";
 import { sagePackages } from "../../../packages/pi-adapter/src/update.ts";
 
@@ -90,7 +91,9 @@ export function startServer(opts: ServeOptions) {
         const blocked = ids.filter(x => !usable.has(x));
         if (blocked.length) throw new RpcError(ERR.params, `sources not usable (accept them with shareWithModels first, and not removed): ${blocked.join(", ")}`);
         const sessionId = randomUUID();
-        const d = SessionDriver.create(defaultsFor(p.goal as Partial<Goal>), sessionId, ledger, opts.rt, readModels(), broadcast, opts.now);
+        const videoSources = sources.usable(ids).filter(r => r.url && youtubeId(r.url)).map(r => ({ sourceId: r.sourceId, title: r.title, url: r.url! }));
+        const { videoSources: _, ...g } = p.goal as Partial<Goal>; // host-owned field
+        const d = SessionDriver.create(defaultsFor({ ...g, ...(videoSources.length ? { videoSources } : {}) }), sessionId, ledger, opts.rt, readModels(), broadcast, opts.now);
         wire(d); drivers.set(sessionId, d); lease(c, sessionId);
         void d.drain(); // planning runs while the client subscribes; events arrive as notifications
         return { sessionId };
@@ -169,7 +172,7 @@ export function startServer(opts: ServeOptions) {
             if (bytes.length > 16 * 1024 * 1024) throw new Error("files must be 16 MB or less");
             const unpdfEntry = findUnpdf(opts.paths.agent);
             it = await intakeFile(p.name, bytes, undefined, unpdfEntry ? { unpdfEntry } : {});
-          } else if (typeof p.url === "string") it = await intakeUrl(p.url);
+          } else if (typeof p.url === "string") it = typeof p.transcript === "string" ? intakeTranscript(p.url, p.transcript, typeof p.title === "string" ? p.title : undefined) : await intakeUrl(p.url);
           else if (typeof p.text === "string") it = intakeText(typeof p.title === "string" ? p.title : "Pasted notes", p.text);
           else if (typeof p.notePath === "string") {
             const vault = readSettings().vaultPath;

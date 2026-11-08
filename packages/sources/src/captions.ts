@@ -172,30 +172,12 @@ export async function fetchCaptionsFromUrl(urlStr: string, options: CaptionFetch
   }
 }
 
-/** v4 (owner M6): a YouTube watch/share URL → that video's caption track as WebVTT. Same pinned-DNS, public-address-only hops as
- * fetchCaptionsFromUrl; only youtube.com / youtu.be pages and the caption URL they name are fetched. Manual tracks beat auto ones. */
+/** v4: the 11-character id of a YouTube watch/share/shorts/embed/live URL (https only). Used to recognise a video URL and build
+ * citation links; nothing is fetched from YouTube (owner 2026-11-08). */
 export function youtubeId(value: string): string | undefined {
   let u: URL; try { u = new URL(value); } catch { return undefined; }
   if (u.protocol !== "https:") return undefined;
   const host = u.hostname.replace(/^www\.|^m\./, "");
   const id = host === "youtu.be" ? u.pathname.slice(1) : host === "youtube.com" ? (u.pathname === "/watch" ? u.searchParams.get("v") ?? "" : /^\/(?:shorts|embed|live)\/([^/]+)/.exec(u.pathname)?.[1] ?? "") : "";
   return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : undefined;
-}
-export async function fetchYoutubeCaptions(value: string, options: CaptionFetchOptions & { lang?: string } = {}): Promise<{ text: string; format: "vtt"; original: Buffer; videoId: string; trackName: string }> {
-  const videoId = youtubeId(value);
-  if (!videoId) throw new Error("not a YouTube video URL (https://www.youtube.com/watch?v=… or https://youtu.be/…)");
-  const page = await fetchCaptionsFromUrl(`https://www.youtube.com/watch?v=${videoId}&hl=en`, options);
-  const m = /"captionTracks":(\[.*?\])/.exec(page.text);
-  if (!m) throw new Error("this video has no captions YouTube will share without signing in; upload a .vtt/.srt file instead");
-  let tracks: { baseUrl: string; languageCode?: string; kind?: string; name?: { simpleText?: string; runs?: { text: string }[] } }[];
-  try { tracks = JSON.parse(m[1]!); } catch { throw new Error("couldn't read the caption list on the YouTube page"); }
-  const lang = options.lang ?? "en", score = (t: typeof tracks[number]) => (t.languageCode?.startsWith(lang) ? 2 : 0) + (t.kind === "asr" ? 0 : 1);
-  const best = [...tracks].sort((a, b) => score(b) - score(a))[0];
-  if (!best?.baseUrl) throw new Error("this video has no caption tracks");
-  const track = new URL(best.baseUrl);
-  if (track.hostname !== "www.youtube.com" && track.hostname !== "youtube.com") throw new Error("unexpected caption host");
-  track.searchParams.set("fmt", "vtt");
-  const cap = await fetchCaptionsFromUrl(track.href, options);
-  if (!cap.text.trim().startsWith("WEBVTT")) throw new Error("YouTube returned no captions for this video (it may require signing in); upload a .vtt/.srt file instead");
-  return { ...cap, format: "vtt", videoId, trackName: best.name?.simpleText ?? best.name?.runs?.map(r => r.text).join("") ?? best.languageCode ?? "captions" };
 }

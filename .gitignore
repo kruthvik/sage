@@ -75,3 +75,6 @@ prose-optimization.json
 # Finder (MacOS) folder config
 .DS_Store
 eval/*.failures.txt
+
+# real pasted transcripts used by a local test (publisher text; not committed)
+packages/sources/test/fixtures/local/

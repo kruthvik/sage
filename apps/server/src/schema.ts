@@ -54,7 +54,7 @@ export const METHODS: Record<string, MethodSpec> = {
   "transcription.confirm": { params: obj({ ...sid, text: { type: "string", minLength: 1, maxLength: 24000 }, latencyMs: { type: "number", minimum: 0 } }, ["sessionId", "text"]), learner: true,
     note: "the learner's checked (optionally edited) transcription; it becomes their response and is graded" },
   "export.get": { params: obj({ ...sid }, ["sessionId"]) },
-  "sources.add": { params: obj({ name: str, dataBase64: { type: "string", minLength: 1, maxLength: 22_000_000 }, url: { type: "string", minLength: 8, maxLength: 2000 }, title: str, text: { type: "string", minLength: 1, maxLength: 2_000_000 },
+  "sources.add": { params: obj({ name: str, dataBase64: { type: "string", minLength: 1, maxLength: 22_000_000 }, url: { type: "string", minLength: 8, maxLength: 2000 }, transcript: { type: "string", minLength: 1, maxLength: 4_000_000 }, title: str, text: { type: "string", minLength: 1, maxLength: 2_000_000 },
     notePath: { type: "string", minLength: 1, maxLength: 1000 }, examSample: { type: "boolean" } }), learner: true,
     note: "one of {name, dataBase64} (≤ 16 MB: pdf/docx/pptx/png/jpg/vtt/srt/txt/md), {url} (YouTube or a .vtt/.srt URL; only that URL is fetched), {title, text}, or {notePath} (a .md under settings.vaultPath). Returns the source in needs_review" },
   "sources.preview": { params: obj({ sourceId: str }, ["sourceId"]) },

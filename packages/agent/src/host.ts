@@ -20,7 +20,9 @@ export interface HostDeps {
   /** Stored learner photos by hash (scrap_work); absent ⇒ the transcriber role is unavailable. */
   readImage?: (hash: string) => { data: string; mimeType: string };
   /** Learner sources (accepted + consented only; the store enforces it). Excerpts are untrusted data in prompts. */
-  sources?: { excerpts(ids: string[], query: string, k?: number): { spanId: string; title: string; locator: string; text: string }[]; outline(ids: string[]): string };
+  sources?: { excerpts(ids: string[], query: string, k?: number): { spanId: string; title: string; locator: string; text: string }[]; outline(ids: string[]): string;
+    /** Display citations for span ids (video spans link to the moment: URL&t=<seconds>s). */
+    cite?(spanIds: string[]): { spanId: string; title: string; locator: string; link?: string }[] };
 }
 export interface HostEvent { event: EngineEvent; actor: "role" | "host" }
 type CallRole = Extract<Effect, { kind: "call_role" }>;

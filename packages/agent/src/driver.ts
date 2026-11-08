@@ -154,7 +154,12 @@ export class SessionDriver {
       case "present_chunk": return this.out("tutor.done", { text: fx.text, kind: "chunk" });
       case "transcription_review": return this.out("transcription.review", { itemId: fx.itemId, text: fx.text });
       case "present_item": return this.out("item.present", { item: fx.item, ...(fx.cueText ? { cueText: fx.cueText } : {}) });
-      case "present_feedback": this.out("grade.result", { attemptId: fx.attemptId, score: fx.grade.score0to100 }); return this.out("feedback.present", fx);
+      case "present_feedback": {
+        this.out("grade.result", { attemptId: fx.attemptId, score: fx.grade.score0to100 });
+        const a = this.state.attempts.find(x => x.id === fx.attemptId), spans = (a && this.state.items.get(a.itemId)?.sourceSpans) || [];
+        const citations = spans.length ? this.sources?.cite?.(spans) ?? [] : []; // after the answer, so a check stays independent
+        return this.out("feedback.present", citations.length ? { ...fx, citations } : fx);
+      }
       case "repair_required": return this.out("repair.required", fx);
       case "reveal_hint": case "offer_hint": case "show_chunk": return this.out("hint.reveal", fx);
       case "gate_update": return this.out("gate.update", fx);

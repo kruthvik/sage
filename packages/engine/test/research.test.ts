@@ -25,6 +25,14 @@ test("(d) a named exam or course triggers research for its format and samples", 
   expect(researchCalls(r.created).map(c => c.purpose)).toEqual(["exam"]);
 });
 
+test("a YouTube source queues one background search for the publisher's own transcript", () => {
+  const v = { sourceId: "src_v", title: "Lecture 3", url: "https://www.youtube.com/watch?v=arj7oStGLkU" };
+  const r = researchCalls(start({ sourceIds: ["src_v"], videoSources: [v] }).created);
+  expect(r.map(c => [c.purpose, c.background])).toEqual([["video_transcript", true]]);
+  expect(r[0]!.input.video).toEqual(v);
+  expect(String(r[0]!.input.question)).toContain("publisher's own website");
+});
+
 test("(b)/(c) node start: uncovered by learner sources, or low planner confidence", () => {
   const lowPlan: Plan = { ...plan, nodes: plan.nodes.map((x, i) => ({ ...x, knowledgeConfidence: i === 0 ? "low" as const : "high" as const })) };
   expect(researchCalls(start({ sourceIds: ["src1"] }, lowPlan).approved).map(c => c.purpose)).toEqual(["low_confidence"]);

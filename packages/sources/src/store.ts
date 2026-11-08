@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { Ledger } from "../../storage/src/ledger.ts";
 import { canonical, hash } from "../../storage/src/ledger.ts";
+import { transcriptLink } from "./transcript.ts";
 
 export type SourceKind = "pdf" | "docx" | "pptx" | "image" | "captions" | "text" | "note";
 export type SourceStatus = "needs_review" | "accepted" | "removed";
@@ -12,7 +13,7 @@ export interface SourceRecord {
   /** Consent to send excerpts of this source to model providers (planner/generator). Required to use it in a session. */
   shareWithModels: boolean; url?: string; examSample?: boolean; warnings: string[]; spans: number; createdAt: string;
 }
-export interface Excerpt { spanId: string; sourceId: string; title: string; locator: string; text: string }
+export interface Excerpt { spanId: string; sourceId: string; title: string; locator: string; text: string; link?: string }
 export interface Part { locator: string; text: string }
 
 const SPAN_CHARS = 900;
@@ -71,7 +72,14 @@ export class SourceStore {
     if (!rec) throw new Error(`unknown source ${sourceId}`);
     return this.ledger.db.query<{ span_id: string; locator: string; text: string }, [string, string]>(
       "SELECT s.span_id, s.locator, s.text FROM source_span s JOIN object_revision r ON r.revision_id = s.source_revision_id WHERE r.entity_id=? AND r.revision_id = (SELECT s2.source_revision_id FROM source_span s2 JOIN object_revision r2 ON r2.revision_id = s2.source_revision_id WHERE r2.entity_id=? ORDER BY r2.created_seq DESC, r2.rowid DESC LIMIT 1) ORDER BY s.ordinal")
-      .all(sourceId, sourceId).map(r => ({ spanId: r.span_id, sourceId, title: rec.title, locator: r.locator, text: r.text }));
+      .all(sourceId, sourceId).map(r => { const link = transcriptLink(rec.url, r.locator); return { spanId: r.span_id, sourceId, title: rec.title, locator: r.locator, text: r.text, ...(link ? { link } : {}) }; });
+  }
+
+  /** Citations for span ids an item cited (title, locator, link to the moment for videos). Unknown or removed sources are skipped. */
+  cite(spanIds: string[]): { spanId: string; title: string; locator: string; link?: string }[] {
+    const ids = new Set(spanIds), bySource = new Set(spanIds.map(id => id.split(":")[0]!));
+    return [...bySource].flatMap(sid => { const r = this.get(sid); return r && r.status !== "removed" ? this.spans(sid) : []; })
+      .filter(e => ids.has(e.spanId)).map(({ spanId, title, locator, link }) => ({ spanId, title, locator, ...(link ? { link } : {}) }));
   }
 
   /** The learner accepts the source; `shareWithModels` is their consent for excerpts to be sent to the model providers. */
