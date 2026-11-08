@@ -154,7 +154,10 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
         return { content: [{ type: "text" as const, text }], details: undefined };
       },
     }));
-    const { session } = await sdk.createAgentSessionFromServices({ services: svc, sessionManager: sdk.SessionManager.inMemory(opts.paths.home), model,
+    // Stable id per tutor system prompt = stable prompt_cache_key, so the packet's fixed prefix is cached across turns (a fresh id per turn never hit the cache).
+    // shortcut: concurrent learner sessions share the id, and dispose() runs pi's per-id cleanup (only openai-codex websockets); key it per Sage session if that ever bites.
+    const cacheId = `sage-tutor-${createHash("sha256").update(input.system).digest("hex").slice(0, 16)}`;
+    const { session } = await sdk.createAgentSessionFromServices({ services: svc, sessionManager: sdk.SessionManager.inMemory(opts.paths.home, { id: cacheId }), model,
       customTools: customTools as never, tools: [...input.active], ...(input.reasoning ? { thinkingLevel: input.reasoning as never } : {}) });
     const timer = setTimeout(() => void session.abort(), input.timeoutMs ?? 2 * ROLE_DEADLINE_MS);
     const relay = () => void session.abort();

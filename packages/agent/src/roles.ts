@@ -4,6 +4,7 @@
 import type { ActivityType, Dimension, ExamFormat, Goal, Item, Partition, PlanNode, Plan, SourcePackItem, SubSkillKind } from "../../core/src/types.ts";
 import { extractJson, isObj } from "./json.ts";
 import { ACTIVITY_EVIDENCE } from "../../engine/src/pedagogy.config.ts";
+import { gateMinutes } from "../../engine/src/pacing.ts";
 
 const str = (v: unknown, what: string): string => { if (typeof v !== "string" || !v.trim()) throw new Error(`reply is missing ${what}`); return v.trim(); };
 const arr = (v: unknown, what: string): unknown[] => { if (!Array.isArray(v)) throw new Error(`reply is missing ${what}`); return v; };
@@ -23,8 +24,21 @@ Rules:
 Reply with JSON only:
 {"nodes":[{"id":"n1","title":"...","prerequisites":[],"examWeight":"high","estMinutes":20,"knowledgeConfidence":"high","misconceptionsToProbe":["..."],"subskills":[{"id":"n1.s1","statement":"can ...","kind":"procedural","selectionRelevant":false,"proxyFor":null}]}]}`;
 
+/**
+ * What the gate charges, so the plan can fit the budget (R&D 2026-11-08, eval/PLANNER_FIT.md: without it terra planned ~2× the budget).
+ * Uses the procedural subskill cost, the dearer kind, so the count errs toward fitting.
+ */
+export function budgetHint(g: Pick<Goal, "mode" | "pace" | "timeBudgetMin">): string {
+  const check = gateMinutes({ subskills: [] }, g.mode, g.pace);
+  const per = gateMinutes({ subskills: [{ id: "x", statement: "", kind: "procedural", selectionRelevant: false }] as PlanNode["subskills"] }, g.mode, g.pace) - check;
+  const fit = g.timeBudgetMin ? Math.max(2, Math.floor((g.timeBudgetMin - 3 * check) / per)) : undefined;
+  return `Time cost at this mode's mastery gate (computed, not a guess): each subskill takes about ${per} min to pass and each node adds a ${check}-min node check.` +
+    (fit ? ` To fit ${g.timeBudgetMin} min, use at most about ${fit} subskills in total across 2-4 nodes: keep only what the objective needs most, merge closely related skills, and skip nice-to-haves.` : "");
+}
+
 export function plannerUser(goal: Goal, extra: { brainDigest?: string; sourceOutline?: string; diagnosticSummary?: string } = {}): string {
   return [DATA("Learner goal", { objective: goal.objective, mode: goal.mode, pace: goal.pace, timeBudgetMin: goal.timeBudgetMin, horizonDays: goal.horizonDays, exam: goal.exam, allowedAids: goal.allowedAids, learnerParams: goal.learnerParams }),
+    budgetHint(goal),
     extra.brainDigest ? DATA("What the learner already knows", extra.brainDigest) : "",
     extra.sourceOutline ? DATA("Outline of the learner's sources", extra.sourceOutline) : "",
     extra.diagnosticSummary ? DATA("Diagnostic results", extra.diagnosticSummary) : ""].filter(Boolean).join("\n\n");
