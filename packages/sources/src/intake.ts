@@ -8,7 +8,7 @@ import { extractPdfWithUnpdf } from "./unpdf.ts";
 import { extractRasterText } from "./raster.ts";
 import { extractOfficeText } from "./office.ts";
 import { fetchCaptionsFromUrl, parseCaptions, youtubeId } from "./captions.ts";
-import { YOUTUBE_PASTE_HINT, parseYoutubeTranscript, transcriptParts, youtubeWatchUrl } from "./transcript.ts";
+import { YOUTUBE_PASTE_HINT, decodeEntities, parseYoutubeTranscript, transcriptParts, youtubeWatchUrl } from "./transcript.ts";
 import { sniffImage } from "../../storage/src/blobs.ts";
 import type { Part, SourceKind } from "./store.ts";
 
@@ -76,7 +76,13 @@ export function intakeTranscript(url: string, text: string, title?: string): Int
   const watch = youtubeWatchUrl(url);
   if (!watch) throw new Error("not a YouTube video URL (https://www.youtube.com/watch?v=… or https://youtu.be/…)");
   const segs = parseYoutubeTranscript(text);
-  if (!segs) throw new Error(`That doesn't look like a YouTube transcript (timestamp lines followed by text). ${YOUTUBE_PASTE_HINT}.`);
+  if (!segs) {
+    // Copied with timestamps hidden: keep the words, cite by line, and link to the video without inventing a time.
+    const plain = decodeEntities(text).trim();
+    if (plain.split(/\s+/).length < 50) throw new Error(`That's too short for a video transcript. ${YOUTUBE_PASTE_HINT}.`);
+    return { title: title?.trim() || `YouTube ${youtubeId(url)}`, kind: "captions", method: "youtube-paste-untimed-v1", url: watch, parts: textParts(plain),
+      contentHash: hash(`${watch}\n${text}`), warnings: ["This transcript has no timestamps, so citations link to the start of the video. For a link to each moment, paste it again with timestamps showing in YouTube's transcript panel."] };
+  }
   return { title: title?.trim() || `YouTube ${youtubeId(url)}`, kind: "captions", method: "youtube-paste-v1", url: watch, parts: transcriptParts(segs),
     contentHash: hash(`${watch}\n${text}`), warnings: [] };
 }

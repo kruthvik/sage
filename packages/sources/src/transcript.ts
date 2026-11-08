@@ -25,9 +25,13 @@ export const clock = (sec: number) => {
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 };
 
+// Copies from the transcript panel can carry HTML entities (seen in a real paste: &quot;).
+const ENT: Record<string, string> = { quot: '"', amp: "&", apos: "'", "#39": "'", lt: "<", gt: ">", nbsp: " " };
+export const decodeEntities = (s: string) => s.replace(/&(quot|amp|apos|#39|lt|gt|nbsp);/g, (_, k: string) => ENT[k]!);
+
 /** The pasted text as timestamped segments, or undefined when it isn't YouTube's transcript layout. */
 export function parseYoutubeTranscript(text: string): TranscriptSegment[] | undefined {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n").map(l => l.trim()).filter(l => l && !LABEL.test(l));
+  const lines = decodeEntities(text).replace(/\r\n?/g, "\n").split("\n").map(l => l.trim()).filter(l => l && !LABEL.test(l));
   const blocks: { seconds: number; lines: string[] }[] = [], pre: string[] = [];
   for (const l of lines) {
     const sec = seconds(l), inline = sec === undefined ? TS_INLINE.exec(l) : null, isec = inline ? seconds(inline[1]!) : undefined;
@@ -78,5 +82,6 @@ export const youtubeWatchUrl = (url: string) => { const id = youtubeId(url); ret
 /** A citation link for a span: the video at the span's start time (URL&t=<seconds>s). Undefined for non-YouTube sources. */
 export function transcriptLink(url: string | undefined, locator: string): string | undefined {
   const watch = url ? youtubeWatchUrl(url) : undefined, start = seconds(/^[\d:]+/.exec(locator)?.[0] ?? "");
-  return watch && start !== undefined ? `${watch}&t=${start}s` : undefined;
+  if (!watch) return undefined;
+  return start !== undefined ? `${watch}&t=${start}s` : watch; // untimed paste (line locators): the video, no invented time
 }

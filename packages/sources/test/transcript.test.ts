@@ -77,3 +77,26 @@ test.skipIf(!existsSync(REAL))("real pasted transcript of at least 30 minutes", 
   expect(spans.every(s => s.link && /&t=\d+s$/.test(s.link))).toBe(true);
   console.log(`real transcript: ${segs.length} segments, ${clock(segs.at(-1)!.seconds)}, ${new Set(segs.map(s => s.chapter)).size} chapter(s), ${spans.length} spans`);
 });
+
+// The owner's real paste (2026-11-08): a ~95-minute accounting course copied with timestamps hidden. Wrapped lines, no times,
+// HTML entities. Not committed; it lives in test/fixtures/local/youtube-transcript-untimed.txt.
+const UNTIMED = join(import.meta.dir, "fixtures", "local", "youtube-transcript-untimed.txt");
+test.skipIf(!existsSync(UNTIMED))("real paste without timestamps: kept as an untimed transcript, linked to the video with no invented time", () => {
+  const paste = readFileSync(UNTIMED, "utf8");
+  expect(paste.split(/\s+/).length).toBeGreaterThan(30 * 150); // over 30 minutes of speech at ~150 words/min
+  expect(parseYoutubeTranscript(paste)).toBeUndefined();
+  const it = intakeTranscript(URL_, paste);
+  expect(it.method).toBe("youtube-paste-untimed-v1");
+  expect(it.warnings[0]).toMatch(/no timestamps/);
+  const store = new SourceStore(new Ledger(":memory:")), spans = store.spans(store.add(it).sourceId);
+  expect(spans.every(s => s.link === "https://www.youtube.com/watch?v=arj7oStGLkU")).toBe(true); // no &t: we don't know the time
+  const all = spans.map(s => s.text).join("\n");
+  expect(all).not.toContain("&quot;");
+  expect(all).toContain('"Oh no, this must be');
+  expect(all).toContain("debit cash 5,000, credit owner's");
+  const id = store.list()[0]!.sourceId;
+  expect(store.excerpts([id], "depreciation")).toEqual([]); // not accepted yet: nothing reaches a model
+  store.accept(id, true);
+  expect(store.excerpts([id], "straight-line depreciation salvage value")[0]!.text).toMatch(/straight-line/i);
+  console.log(`untimed real paste: ${spans.length} spans, ${it.parts.length} parts, ${all.split(/\s+/).length} words`);
+});
