@@ -1,12 +1,12 @@
 // Real-grader calibration (SPEC §18.4, task 3). Usage: bun packages/eval/calibration/run-grader.ts <provider>/<model> [repeats]
-// Reports A1–A10 (owner-scored, final) and C01–C20 (Claude-written, UNREVIEWED) separately; only A1–A10 is a gate until the owner confirms C.
+// Reports A1–A10, C01–C20 (both owner-scored) and all 30. The gate (owner, 2026-11-08): every single repeat passes on all 30.
 // Credentials: Sage's own agent dir only (sage setup + sage login).
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { evalRuntime } from "../src/eval-runtime.ts";
 import { GRADER_SYSTEM, GRADE_OUTPUT, graderUser, parseGrade } from "../../agent/src/grader.ts";
 import { validateGrade } from "../../engine/src/evidence.ts";
-import { ANCHORS, GENERATED, calibrate, type Triple } from "./set.ts";
+import { ANCHORS, CALIBRATION_SET, GENERATED, calibrate, type Triple } from "./set.ts";
 import { CALIBRATION } from "../../engine/src/pedagogy.config.ts";
 
 const [spec, repeatsArg] = process.argv.slice(2);
@@ -69,16 +69,23 @@ const started = Date.now();
 const [a, c] = [await pool(ANCHORS, 4, gradeOne), await pool(GENERATED, 4, gradeOne)];
 const all = [...a, ...c];
 const cost = all.some(r => r.cost === "unknown") ? "unknown" : `$${all.reduce((x, r) => x + (r.cost as number), 0).toFixed(4)}`;
-const A = section("A1–A10 (owner-scored, final; this is the gate)", ANCHORS, a);
-const C = section("C01–C20 (Claude-written, UNREVIEWED; informational until the owner confirms)", GENERATED, c);
+const A = section("A1–A10", ANCHORS, a);
+const C = section("C01–C20", GENERATED, c);
+const ALL = section("All 30 (mean of repeats)", CALIBRATION_SET, all);
+const limits = { maxMae: CALIBRATION.maxMae, maxMeanSignedError: CALIBRATION.maxMeanSignedError, ceiling: CALIBRATION.lenientCeiling };
+const perRepeat = Array.from({ length: repeats }, (_, i) => calibrate(Object.fromEntries(all.filter(r => r.scores[i] !== undefined).map(r => [r.id, r.scores[i]!])), CALIBRATION_SET, limits));
+const gatePassed = perRepeat.every(r => r.passed);
+const gate = ["## Gate: each repeat on all 30", "", "| repeat | n | MAE | mean signed | ceiling violations | result |", "|---|---|---|---|---|---|",
+  ...perRepeat.map((r, i) => `| ${i + 1} | ${r.n}/30 | ${r.mae.toFixed(1)} | ${r.meanSigned >= 0 ? "+" : ""}${r.meanSigned.toFixed(1)} | ${r.lenientViolations.join(", ") || "none"} | ${r.passed ? "pass" : "FAIL"} |`),
+  "", `Worst repeat MAE ${Math.max(...perRepeat.map(r => r.mae)).toFixed(1)} · **${gatePassed ? "PASS" : "FAIL"}**`, ""];
 const report = [`# Grader calibration: ${provider}/${tag}`, "",
   `${new Date().toISOString()} · repeats ${repeats} · ${Math.round((Date.now() - started) / 1000)} s wall · tokens in ${all.reduce((x, r) => x + r.inTok, 0)} / out ${all.reduce((x, r) => x + r.outTok, 0)} · cost ${cost}`,
   "Score = 100 × mean criterion credit − precision deductions (met criteria only) − min(polish, 4), computed in code from the model's judgements.", "",
-  ...A.lines, ...C.lines].join("\n");
+  ...gate, ...ALL.lines, ...A.lines, ...C.lines].join("\n");
 mkdirSync(join(import.meta.dir, "..", "..", "..", "eval"), { recursive: true });
 const out = join(import.meta.dir, "..", "..", "..", "eval", `CALIBRATION-${provider}-${tag}.md`);
 writeFileSync(out, report);
 if (failures.length) writeFileSync(out.replace(/\.md$/, ".failures.txt"), failures.join("\n")); // raw replies that didn't parse; local diagnosis only (gitignored)
 console.log(report);
 console.log(`\nwrote ${out}`);
-process.exit(A.res.passed ? 0 : 1);
+process.exit(gatePassed ? 0 : 1);

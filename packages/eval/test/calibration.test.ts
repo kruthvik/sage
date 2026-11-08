@@ -3,7 +3,7 @@ import { CALIBRATION_SET, GENERATED, calibrate } from "../calibration/set.ts";
 import { CALIBRATION } from "../../engine/src/pedagogy.config.ts";
 
 test("set shape: 10 owner anchors + ≥20 triples over ≥6 domains, each with a wrong-reason and a precision-only case", () => {
-  expect(CALIBRATION_SET.filter(t => t.author === "owner").length).toBe(10);
+  expect(CALIBRATION_SET.every(t => t.author === "owner")).toBe(true); // owner reviewed C01–C20 on 2026-11-08
   expect(GENERATED.length).toBeGreaterThanOrEqual(20);
   const domains = new Map<string, Set<string>>();
   for (const t of GENERATED) { const k = ["music", "chess"].includes(t.domain) ? "practical" : ["stats", "economics", "personal_finance"].includes(t.domain) ? "econ_stats" : t.domain; domains.set(k, new Set([...(domains.get(k) ?? []), ...t.tags])); }

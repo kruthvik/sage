@@ -12,3 +12,5 @@ Parked by owner decision (2026-11-07: "short-term learning first"). The data mod
 | Accelerate extras (diagnostic ≤12 min UX) | test-out rule implemented | engine |
 | Voice recall | `ResponseInput.audio_transcript` shape only | activities |
 | General-purpose tutor subagents | rejected; the only subagent is `researcher` | – |
+| `ui-bridge.ts` (pi extension UI → client) | missing; pi's no-op UI is used, so headless works but extensions that need UI (dialogs, prompts, widgets) don't. The original goal was "pi without the TUI, extensions keep working" (owner, 2026-11-08: revisit when the GUI phase starts) | `pi-adapter` + `ui.respond` in API.md |
+| ED-29 minute estimates split by activity type | one set of per-dimension minutes; long-form open answers (ww1 history) take far longer than numeric ones (owner, 2026-11-08: split once there's real session data) | `pedagogy.config.ts` (`ITEM_MIN`) + `pacing.ts` |
