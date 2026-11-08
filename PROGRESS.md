@@ -111,7 +111,11 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - **Key check (b).** Every generated numeric/choice/exact key is solved blind by the `checker` role (flash): the solver's arithmetic expression is evaluated in code when it gives one, else its answer is used. Disagreement or "ambiguous" → that item is regenerated once; still disagreeing → dropped. `packages/agent/src/keycheck.ts`.
 - **Key disputes (a).** `grade.dispute` on an answer-key item (while its feedback shows) → grader re-checks key vs working. Wrong key → item voided (never evidence, never shown), all attempts re-scored against the corrected key (kept, not evidence), cue ladders dropped, replacement generated (`bank_generated` purpose `replace`). Key stands → notice with the reason.
 - **Plan fit.** Node minutes come from the gate (ED-29 constants: per-dimension item minutes, chunk, node-check item, retry factor), not the planner. `plan.fit` at proposal/merge/pace/time changes: when over budget it offers extend to N min, `plan.merge` of adjacent pairs, or Speed-up, each with its estimate. Gate unchanged. ED-29 numbers are guesses to recalibrate from real sessions.
-- **Researcher** returns its pack through a `submit_pack` tool call with a JSON schema (pi validates the arguments), not prose JSON. Untested live yet.
+- **Researcher** returns its pack through a `submit_pack` tool call with a JSON schema (pi validates the arguments), not prose JSON. **Live-tested 2026-11-08 on flash** (`bun packages/eval/src/research-probe.ts`):
+  - YouTube publisher-transcript trigger, using a TED talk: 48 s, 110k tokens in, $0.014. It returned one item, the official `ted.com/…/transcript`, rated as the publisher's primary source, with verbatim opening lines as spans. YouTube and transcript farms were ignored.
+  - Intake for accounting basics: 27 s, $0.003. Five credible sources (AccountingCoach ×2, OpenStax, Investopedia, CFI), every one with a URL.
+  - Both packs stay pending until the learner accepts them.
+  - **Finding:** the intake spans were summaries, not the short exact quotes the prompt asks for. Nothing checks spans against the fetched page yet.
 - **Flash as grader:** fails the A1–A10 gate at default reasoning (MAE 8.8) and at medium (MAE 8.7, signed −0.5). The misses are the same two anchors both times: A7 (target 55, flash 25) and A8 (target 65, flash 88). sol passes (MAE 5.5). High reasoning was started but stopped unfinished.
 
 ### M4: what exists (2026-11-08)
@@ -224,7 +228,7 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 ## Next 3 tasks
 
-1. Live-test the researcher's `submit_pack` (never run live). This includes the new YouTube publisher-transcript trigger.
+1. Researcher spans: check each span against the text the researcher actually fetched, and drop or flag paraphrases, so a citation is a quote.
 2. The real Cram session waits until there's a GUI (owner 2026-11-08: the dev console is too hard to use, and no GUI yet).
 3. The remaining eval notes: flash grader JSON failures after retry, and ww1 long-form passes nothing.
 
