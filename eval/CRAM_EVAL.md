@@ -53,7 +53,9 @@ ww1 rerun with the hypothesis fix (d90cd18):
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | calc | math | adaptive | 90 | 192 (over) | 3/6 | 18, 40, 73, 98, —, — | not reached | $0.26 | 242 | 96 graded (79 independent), mean 85, 145 min used, reached 5 nodes | 1765 s | feedback |
 | calc | math | adaptive | 90 | 173 (over) | 3/5 | 32, 51, 88, 126, — | not reached | $0.27 | 249 | 96 graded (78 independent), mean 83, 143 min used, reached 5 nodes | 1925 s | check; 4 errors: tutor_fallback, tutor_failed |
+| calc | math | adaptive | 90 | 89 | 3/3 | 22, 41, 88 | not reached | $0.24 | 141 | 56 graded (40 independent), mean 69, 88 min used, reached 3 nodes | 1064 s | ended |
 
-- Both runs used the old planner (no budget hint), so plans were 5–6 nodes against a 90-min budget; see eval/PLANNER_FIT.md for the fix.
+- Run 3 (third row) adds the planner budget hint and the per-phase tutor cache key. The plan fit the budget (3 nodes, 89-min estimate), every node passed inside 90 min, and it took 141 calls instead of about 245. Cost per session-hour fell only from $0.27 to $0.24, so caching still isn't visibly paying off.
+- Runs 1–2 used the old planner (no budget hint), so plans were 5–6 nodes against a 90-min budget; see eval/PLANNER_FIT.md for the fix.
 - Cost by role, run 1: tutor $0.46 of $0.62 (74%), grader $0.12. Run 2 (with the prompt-cache keys): tutor $0.49, grader $0.12, i.e. no caching discount showed up in the eval although a direct probe (no reasoning setting) cached 1,152 of 1,253 grader tokens. Not yet explained; the reasoning-low path could not be probed because the owner's usage limit was reached.
 - Run 2's 3 tutor_failed errors near the end are probably that usage limit ("Subscription Sharing usage limit").
