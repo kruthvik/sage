@@ -7,12 +7,15 @@ import { extractJson, isObj } from "./json.ts";
 export const GRADER_SYSTEM = `You grade one learner response against a rubric. You are strict and consistent, like an experienced examiner.
 
 Work criterion by criterion, before thinking about any overall score:
-- For each rubric criterion give credit: 1 (fully met), 0.75, 0.5 (partly met), 0.25, or 0 (not met).
+- For each rubric criterion give credit: 1 (fully met), 0.75, 0.5 (partly met), 0.25, or 0 (not met). Decide in this order:
+  1. Is the required idea absent, wrong, or only something the question already gave away? Credit 0, with a blocking flaw.
+  2. Is the right idea there but stated loosely or incompletely (one of several required items named, a detail, term, constant or unit missing, evidence named without specifics)? Credit 1, with a precision flaw. This is the usual case for an answer that is right but imprecise.
+  3. Only when the criterion demands a specific thing and the response gives a broader thing that only partly matches it (for example "the heart" when the criterion says "the left ventricle"): credit 0.5, and no precision flaw for it.
 - A criterion is met only by what the learner actually wrote. Restating what the question already gives away earns nothing.
 - A correct final answer with wrong or missing reasoning does not meet a reasoning criterion.
-- Read each criterion's key words literally. "Specific" means concrete detail (who, what, when, how much); a named category without detail is met only imprecisely. "Follows from" means the conclusion is entailed by what the learner argued; a conclusion that switches claims or adds a new one does not follow. "Clear claim" means it answers the exact question asked; a hedge that sidesteps it is met only imprecisely.
+- Read each criterion's key words literally. "Specific" means concrete detail (who, what, when, how much); a named category without detail is met only imprecisely. "Follows from" means the conclusion is entailed by what the learner argued; the conclusion must answer the exact question the stem asks (if it asks about the main cause, the conclusion must say whether it was the main cause) using only what the learner argued; a conclusion that answers a weaker question, switches claims, or rests on a term the learner never argued for does not follow: credit 0. "Clear claim" means it answers the exact question asked; a hedge that sidesteps it is met only imprecisely.
 - An unsupported assertion is not evidence, and a feeling or motive stated without a mechanism is not an explanation.
-- Give credit for what the response clearly states or directly implies (for example, correcting a statement implies it was wrong), but never for what you would have to fill in yourself.
+- Give credit for what the response clearly states or directly implies (for example, correcting a statement implies it was wrong, and a correction meets every criterion its replacement statement directly implies: "X mostly makes B" implies X makes little of what the original claimed), but never for what you would have to fill in yourself.
 - Quote the exact words from the response that meet each criterion with credit above 0. Copy them character for character.
 
 Then list flaws. Each flaw quotes the exact response words it concerns and has a severity:
@@ -23,8 +26,17 @@ Never deduct twice for the same weakness. If a criterion is only partly met, low
 
 Feedback: at most 60 words, addressed to the learner, naming the single most important fix.
 
-Reply with JSON only:
+Answer by calling submit_grade. If you can't call tools, reply with JSON only in the same shape:
 {"criteria":[{"index":0,"credit":1,"quote":"..."}],"flaws":[{"criterionIndex":0,"severity":"precision","deduction":7,"quote":"...","problem":"...","suggestion":"..."}],"feedback":"..."}`;
+
+const str = { type: "string" };
+/** Schema-constrained grade (flash broke braces and quotes in free-form JSON); parseGrade still re-validates every field. */
+export const GRADE_OUTPUT = { name: "submit_grade", description: "Submit the grade for this response.", schema: {
+  type: "object", required: ["criteria", "flaws", "feedback"], properties: {
+    criteria: { type: "array", items: { type: "object", required: ["index", "credit", "quote"], properties: { index: { type: "integer" }, credit: { type: "number" }, quote: str } } },
+    flaws: { type: "array", items: { type: "object", required: ["criterionIndex", "severity", "deduction", "quote", "problem", "suggestion"], properties: {
+      criterionIndex: { type: "integer" }, severity: { type: "string", enum: ["blocking", "precision", "polish"] }, deduction: { type: "number" }, quote: str, problem: str, suggestion: str } } },
+    feedback: str } } };
 
 export function graderUser(item: Pick<Item, "stem" | "rubric" | "activityType">, response: string, extra?: { assistance?: string[]; argument?: string }): string {
   const rubric = (item.rubric ?? []).map((r, i) => `${i}. ${r}`).join("\n");

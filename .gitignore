@@ -74,3 +74,4 @@ prose-optimization.json
 
 # Finder (MacOS) folder config
 .DS_Store
+eval/*.failures.txt

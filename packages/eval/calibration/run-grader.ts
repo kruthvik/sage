@@ -4,7 +4,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { evalRuntime } from "../src/eval-runtime.ts";
-import { GRADER_SYSTEM, graderUser, parseGrade } from "../../agent/src/grader.ts";
+import { GRADER_SYSTEM, GRADE_OUTPUT, graderUser, parseGrade } from "../../agent/src/grader.ts";
 import { validateGrade } from "../../engine/src/evidence.ts";
 import { ANCHORS, GENERATED, calibrate, type Triple } from "./set.ts";
 import { CALIBRATION } from "../../engine/src/pedagogy.config.ts";
@@ -18,18 +18,31 @@ const tag = reasoning ? `${model}@${reasoning}` : model!;
 
 const rt = await evalRuntime([provider]);
 
+const failures: string[] = [];
 interface Row { id: string; target: number; scores: number[]; problems: string[]; error?: string; inTok: number; outTok: number; cost: number | "unknown"; ms: number }
 async function gradeOne(t: Triple): Promise<Row> {
   const row: Row = { id: t.id, target: t.target, scores: [], problems: [], inTok: 0, outTok: 0, cost: 0, ms: 0 };
   for (let i = 0; i < repeats; i++) {
-    try {
-      const r = await rt.roleCall({ provider: provider!, model: model!, system: GRADER_SYSTEM, user: graderUser(t, t.response), ...(reasoning ? { reasoning } : {}) });
-      row.inTok += r.usage.input; row.outTok += r.usage.output; row.ms += r.ms;
-      row.cost = r.usage.costUsd === "unknown" || row.cost === "unknown" ? "unknown" : row.cost + r.usage.costUsd;
-      const g = parseGrade(r.text, { rubric: t.rubric, evidences: [] });
-      row.scores.push(g.score0to100);
-      row.problems.push(...validateGrade(g, t.response));
-    } catch (e) { row.error = String((e as Error).message ?? e).slice(0, 160); }
+    // Same path as production (host.ts): one retry that says what was rejected.
+    let user = graderUser(t, t.response);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let text = "";
+      try {
+        const r = await rt.roleCall({ provider: provider!, model: model!, system: GRADER_SYSTEM, user, ...(process.env.OUTPUT === "text" ? {} : { output: GRADE_OUTPUT }), ...(reasoning ? { reasoning } : {}) });
+        row.inTok += r.usage.input; row.outTok += r.usage.output; row.ms += r.ms; text = r.text;
+        row.cost = r.usage.costUsd === "unknown" || row.cost === "unknown" ? "unknown" : row.cost + r.usage.costUsd;
+        const g = parseGrade(r.text, { rubric: t.rubric, evidences: [] });
+        row.scores.push(g.score0to100);
+        row.problems.push(...validateGrade(g, t.response));
+        if (attempt) row.problems.push("needed retry");
+        break;
+      } catch (e) {
+        const msg = String((e as Error).message ?? e);
+        failures.push(`## ${t.id} attempt ${attempt}: ${msg}\n${text.slice(0, 2000) || "(empty reply)"}\n`);
+        if (attempt) { row.error = msg.slice(0, 160); break; }
+        user += `\n\nYour previous reply was rejected: ${msg.slice(0, 400)}. Fix exactly that and reply again with JSON only.`;
+      }
+    }
   }
   return row;
 }
@@ -65,6 +78,7 @@ const report = [`# Grader calibration: ${provider}/${tag}`, "",
 mkdirSync(join(import.meta.dir, "..", "..", "..", "eval"), { recursive: true });
 const out = join(import.meta.dir, "..", "..", "..", "eval", `CALIBRATION-${provider}-${tag}.md`);
 writeFileSync(out, report);
+if (failures.length) writeFileSync(out.replace(/\.md$/, ".failures.txt"), failures.join("\n")); // raw replies that didn't parse; local diagnosis only (gitignored)
 console.log(report);
 console.log(`\nwrote ${out}`);
 process.exit(A.res.passed ? 0 : 1);

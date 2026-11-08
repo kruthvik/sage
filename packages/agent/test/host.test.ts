@@ -20,7 +20,8 @@ test("node bank is split into three partition batches, each namespaced", async (
 
 test("a malformed grade is retried once, then the grade carries the attempt id; repair grades observe nothing", async () => {
   let n = 0;
-  const roleCall = async () => reply(n++ === 0 ? "sorry" : JSON.stringify({ criteria: [{ index: 0, credit: 1, quote: "abc" }], flaws: [], feedback: "ok" }));
+  let output: RoleCallInput["output"];
+  const roleCall = async (i: RoleCallInput) => (output = i.output, reply(n++ === 0 ? "sorry" : JSON.stringify({ criteria: [{ index: 0, credit: 1, quote: "abc" }], flaws: [], feedback: "ok" })));
   const item = { id: "i", stem: "Q", rubric: ["r"], activityType: "free_recall", evidences: ["recall"] };
   const evs = await runRole({ kind: "call_role", role: "grader", purpose: "repair", input: { attemptId: "a9", item, response: "abc" } }, initialState(), { models, roleCall, researchCall: roleCall }, 1);
   const g = evs.find(e => e.event.type === "grade_received")!.event as { attemptId: string; grade: { score0to100: number; dimensionsObserved: string[] } };
@@ -28,4 +29,5 @@ test("a malformed grade is retried once, then the grade carries the attempt id; 
   expect(g.attemptId).toBe("a9");
   expect(g.grade.score0to100).toBe(100);
   expect(g.grade.dimensionsObserved).toEqual([]);
+  expect(output?.name).toBe("submit_grade"); // schema-constrained output (flash broke free-form JSON)
 });

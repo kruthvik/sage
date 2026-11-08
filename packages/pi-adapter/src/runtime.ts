@@ -12,7 +12,9 @@ export interface SageRuntimeOptions {
   packages?: (string | { source: string; extensions?: string[] })[];
 }
 
-export interface RoleCallInput { provider: string; model: string; system: string; user: string; maxTokens?: number; timeoutMs?: number; signal?: AbortSignal; /** Provider-neutral reasoning level; omitted ⇒ provider default (the grader was calibrated with the default). */ reasoning?: "minimal" | "low" | "medium" | "high" }
+export interface RoleCallInput { provider: string; model: string; system: string; user: string; maxTokens?: number; timeoutMs?: number; signal?: AbortSignal; /** Provider-neutral reasoning level; omitted ⇒ provider default (the grader was calibrated with the default). */ reasoning?: "minimal" | "low" | "medium" | "high";
+  /** Structured output: the model must answer by calling this one tool; its arguments come back as `text` (JSON). Providers that ignore the forced choice may still answer in text. */
+  output?: { name: string; description: string; schema: Record<string, unknown> } }
 export interface RoleCallResult { text: string; stopReason: string; usage: { input: number; output: number; costUsd: number | "unknown" }; provider: string; model: string; ms: number }
 
 /** Structural copy of sage-extension's SageTool, bound to a bridge (pi-adapter never imports Sage packages above core). */
@@ -54,12 +56,16 @@ export async function createSageRuntime(opts: SageRuntimeOptions) {
     const timer = setTimeout(() => controller.abort(new Error("role call took too long; try again or choose another model")), input.timeoutMs ?? ROLE_DEADLINE_MS);
     const started = Date.now();
     try {
-      const ctx = { systemPrompt: input.system, messages: [{ role: "user" as const, content: input.user, timestamp: started }] };
-      const o = { maxTokens: Math.min(input.maxTokens ?? ROLE_MAX_OUTPUT_TOKENS, ROLE_MAX_OUTPUT_TOKENS), signal: controller.signal };
-      const msg = input.reasoning ? await models.completeSimple(model, ctx, { ...o, reasoning: input.reasoning }) : await models.complete(model, ctx, o as never);
+      const out = input.output;
+      const ctx = { systemPrompt: input.system, messages: [{ role: "user" as const, content: input.user, timestamp: started }],
+        ...(out ? { tools: [{ name: out.name, description: out.description, parameters: out.schema }] } : {}) };
+      // "required" is what antigravity maps to Gemini's forced function call (mode ANY); pi's own type only lists auto/none.
+      const o = { maxTokens: Math.min(input.maxTokens ?? ROLE_MAX_OUTPUT_TOKENS, ROLE_MAX_OUTPUT_TOKENS), signal: controller.signal, ...(out ? { toolChoice: "required" } : {}) };
+      const msg = input.reasoning ? await models.completeSimple(model, ctx, { ...o, reasoning: input.reasoning } as never) : await models.complete(model, ctx, o as never);
       if (controller.signal.aborted) throw controller.signal.reason ?? new Error("cancelled");
-      if (msg.content.some(p => p.type === "toolCall")) throw new Error("role call returned a tool call; roles have no tools");
-      const text = msg.content.filter(p => p.type === "text").map(p => (p as { text: string }).text).join("\n");
+      const calls = msg.content.filter(p => p.type === "toolCall") as { name: string; arguments: unknown }[];
+      if (calls.some(c => c.name !== out?.name)) throw new Error("role call returned a tool call; roles have no tools");
+      const text = calls.length ? JSON.stringify(calls[0]!.arguments) : msg.content.filter(p => p.type === "text").map(p => (p as { text: string }).text).join("\n");
       if (msg.stopReason === "length") throw new Error(`role call hit the ${o.maxTokens}-token output limit; ask for less per call`);
       if (msg.stopReason === "error" || msg.stopReason === "aborted") throw new Error(`role call failed: ${(msg as { errorMessage?: string }).errorMessage ?? msg.stopReason}`);
       if (!text.trim()) throw new Error("role call returned no text");
