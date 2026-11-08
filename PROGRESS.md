@@ -20,7 +20,7 @@ Read `docs/SPEC.md` first (the owner's Phase 1 brief). This file says where thin
 | M3 Server/API/dev console ◆ | **built; eval incomplete (stopped: owner's Codex usage limit hit)**. Driver, `sage serve`, API v1 frozen + schema, dev console, CLI. **STOP here for the owner's real Cram session.** | `bun test` 72 pass · `tsc` clean · server boots with real runtime · commits `da602b8`…`77d60d8` |
 | M4 Exports | **done** (PDF maths font question open; see M4 below) | `bun test` 94 pass · `tsc` clean |
 | M5 Activities ◆ | **done** (owner batch answered 2026-11-08) | `bun test` 102 pass · `tsc` clean · live flash vision probe |
-| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 111 pass · `tsc` clean · local OCR verified on Windows |
+| M6 Integrations | **done** (owner batch answered 2026-11-08; YouTube limit below) | `bun test` 111 pass · `tsc` clean · local Tesseract OCR verified; PDF text dependency is an open owner ask |
 
 M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechanisms, 27 engineering defaults), `docs/DESIGN.md`, `docs/LIBRARY_CANDIDATES.md`.
 
@@ -142,7 +142,7 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 
 ### M6: what exists (2026-11-08)
 - **`packages/sources`:**
-  - Ported from v3: PDF text, Windows-OCR raster and captions (SSRF-safe pinned DNS).
+  - Ported from v3: PDF text, local OCR (Windows renders PDF pages; **Tesseract on PATH** reads them, English/Spanish) and captions (SSRF-safe pinned DNS).
   - New: `office.ts`, a bounded ZIP reader with ZIP-bomb ratio/size caps that gives docx paragraphs and pptx slides.
   - `intake.ts` routes files and URLs to these extractors. `store.ts` holds sources as immutable `object_revision` + `source_span` rows in the ledger, with a derived FTS5 index (`source_fts`; SCHEMA_VERSION unchanged).
 - **Source lifecycle:**
@@ -156,7 +156,7 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 - **Also:** `extensions.list` always carries the OS-privilege notice, and the `settings.get` capabilities registry shows calculate as available and graph/drawing as unavailable, each with a reason. The console has a Sources panel and vault/extensions controls.
 - **Limits found (flag):**
   - **YouTube** shares no captions without sign-in for the test video (TED, has captions). The page's track URL now needs a proof-of-origin token. Spoofing a mobile client was refused as bot-check circumvention, and Sage won't do it. So YouTube URLs fail with a clear message; uploading a .vtt/.srt file or a direct caption URL works.
-  - **PDF:** v3's text parser refuses xref/object streams (most PDFs since 1.5). Those fall back to local OCR (≤ 12 pages) with a warning. Upgrade: resolve objects with pdf-lib's parser (already a dependency).
+  - **PDF:** v3's text parser refuses xref/object streams (most PDFs since 1.5). Worse, it only reads the 14 standard fonts with ASCII text, so real lecture PDFs (embedded TrueType fonts) will practically always go to OCR, and OCR refuses PDFs over 12 pages (45 s cap). **Owner ask:** a real PDF text dependency (pdf.js via `unpdf`, ~2 MB, pure JS), or keep this and export long PDFs as text.
   - The generator's diagnostic, top-up and replacement calls don't get source excerpts yet; only the node bank does.
 
 ## Research findings worth knowing
@@ -217,7 +217,7 @@ Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-b
 
 1. **Owner:** the real Cram session through the dev console (`bun run sage serve`), which is the last part of Phase 1 done that needs you. Check plan approval, gating, quoted grading, repair, dispute and pace, then Export and read `session.md` and the cheat-sheet PDFs.
 2. **Owner:** M4 PDF maths: keep pdf-lib with ASCII spellings, embed a Unicode TTF you supply, or add Typst (new dependency).
-3. PDF object streams through pdf-lib (so lecture PDFs over 12 pages keep their text), then excerpts for diagnostic/top-up generation.
+3. **Owner:** decide the PDF text dependency (see M6 limits). Then excerpts for diagnostic/top-up generation.
 
 ## Commands
 

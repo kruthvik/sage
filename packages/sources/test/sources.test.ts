@@ -61,7 +61,7 @@ test("only YouTube video URLs are treated as YouTube", () => {
   expect(youtubeId("https://evil.example/watch?v=arj7oStGLkU")).toBeUndefined();
 });
 
-test.if(process.platform === "win32")("scans are read by local Windows OCR", async () => {
+test.if(process.platform === "win32")("scans are read by local OCR (Tesseract)", async () => {
   const png = await Bun.file(`${import.meta.dir}/fixtures/working.png`).bytes();
   const r = await intakeFile("scan.png", png);
   expect(r.parts.map(p => p.text).join(" ")).toMatch(/x\s*=\s*5/);

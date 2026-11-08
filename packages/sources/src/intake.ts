@@ -32,7 +32,7 @@ export async function intakeFile(name: string, bytes: Uint8Array, signal?: Abort
       why = "Sage's PDF text reader can't parse this PDF's structure";
     }
     const o = await extractRasterText(bytes, "application/pdf", signal);
-    return { title, kind: "pdf", method: o.method, parts: o.parts, contentHash, warnings: [`${why}, so the pages were read by local OCR (first 12 pages at most). Check the text for misreads.`] };
+    return { title, kind: "pdf", method: o.method, parts: o.parts, contentHash, warnings: [`${why}, so the pages were read by local OCR (Tesseract; PDFs of up to 12 pages). Check the text for misreads.`] };
   }
   if (ext === "docx" || ext === "pptx") { const o = extractOfficeText(bytes, name); return { title, kind: o.kind, method: "office-xml-v1", parts: o.parts, contentHash, warnings }; }
   if (["png", "jpg", "jpeg"].includes(ext)) {
