@@ -37,3 +37,12 @@ Grader answers through the forced `submit_grade` tool; per-criterion decision or
 
 - calc: 3/4 in budget (was 1/4, then 2/4); 0 grader errors in 92 grades (earlier runs stalled on unparseable grades).
 - ww1: 0/5 again, but not a grading problem: the flash tutor proposed 4 hypotheses on node 1's first subskill (two high-confidence, which block the gate) and never resolved them, then chose `probe_hypothesis` 123 times. Only the first (medium) hypothesis was ever offered as a probe target. Fixed in the engine afterwards: graded probes now resolve a hypothesis in code (2 independent passes) or mark it uncertain after 3 probes, and high-confidence hypotheses are probed first.
+
+ww1 rerun with the hypothesis fix (d90cd18):
+
+| unit | domain | arm | budget min | plan estimate min | nodes passed in budget | minutes to pass each node | end-of-session mixed check | cost per session-hour | model calls | progress | wall | end state |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ww1 | history | adaptive | 120 | 104 | 1/4 | 60, 127, —, — | not reached | $0.09 | 284 | 82 graded (54 independent), mean 76, 192 min used, reached 3 nodes | 3743 s | check |
+
+- 1/4 in budget (was 0/5); the second node passed at 127 min, just over. The planner made 4 nodes this time (5 before), so plans differ run to run.
+- The tutor proposed no hypotheses in this run, so the probe fix wasn't exercised live; it is covered by engine tests only.
