@@ -21,6 +21,11 @@ import type { Item, ResponseInput } from "../../core/src/types.ts";
 import { UNITS, type Unit } from "./units.ts";
 export { UNITS };
 
+// MEM_LOG=<file>: append "wall s, RSS MB, heap MB" every 30 s (leak check; appended so a killed run keeps its samples).
+if (process.env.MEM_LOG) { const f = process.env.MEM_LOG, t0 = Date.now(), mb = (n: number) => (n / 2 ** 20).toFixed(0);
+  const { appendFileSync } = await import("node:fs");
+  const tick = () => { const m = process.memoryUsage(); appendFileSync(f, `${Math.round((Date.now() - t0) / 1000)}\t${mb(m.rss)}\t${mb(m.heapUsed)}\n`); };
+  tick(); setInterval(tick, 30_000).unref(); }
 const one = process.env.EVAL_MODEL?.split("/") as [string, string] | undefined;
 const MODELS: RoleModels = one ? Object.fromEntries(Object.keys(DEFAULT_ROLE_MODELS).map(r => [r, { provider: one[0], model: one[1] }])) as RoleModels : DEFAULT_ROLE_MODELS;
 

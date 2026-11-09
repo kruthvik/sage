@@ -231,11 +231,24 @@ M0 outputs: `docs/SPEC.md`, `docs/V3_PORT.md`, `docs/RESEARCH_MAP.md` (24 mechan
 
 Owner's pi packages (from `~/.pi/agent/settings.json`): pi-plan-mode, pi-agent-browser-native, pi-subagents, rpiv-ask-user-question, pi-antigravity, pi-lens, pi-powerline-footer, pi-web-access, browser-loop, pi-sdd-kit, pi-usage, pi-llama-cpp; local `herdr-agent-state.ts`, `pi-rtk-optimizer`. Providers with auth: openai-codex, github-copilot, antigravity, llama.cpp.
 
+### Ready for the owner's session (2026-11-08)
+- **Memory** (`eval/MEMORY.md`): flat, no leak. A 61-virtual-minute `sage serve` soak went from 164 to 174 MB RSS, and live heap from 28 to 32 MB. A 3-hour session extrapolates to about +30 MB.
+- **Dev console gaps fixed** (fd0da1c):
+  - A repair re-opens the answer box.
+  - Resume after Stop.
+  - Retry on a failed role call.
+  - Reconnect, with the waiting item shown again.
+  - Leave node with gaps.
+  - Grade criteria and severity-tagged flaws are shown.
+  - Exports are shown, and line breaks are kept.
+  - Checked in a real browser on the fake runtime. The repair path was checked by reading the code only.
+- **Grader:** terra/sol calibration not run. The owner said to use flash so their OpenAI credit isn't spent, and calibrating terra/sol runs on terra/sol.
+
 ## Next 3 tasks
 
-1. ww1 rerun on flash, to see the hypothesis fix (d90cd18) work live. The flash grader JSON failures are already fixed: `submit_grade` gave 0 errors in 92 grades.
-2. The tutor's services are reused across turns, but it can't hit the stale extension context. pi-web-access uses its stored ctx only inside its own tools and widget, and the tutor never activates those tools (checked by reading the code).
-3. The real Cram session waits until there's a GUI (owner 2026-11-08: the dev console is too hard to use, and no GUI yet).
+1. **Owner:** run a real Cram session in the dev console (`sage serve`) and send notes. Phase 2 waits for them.
+2. ww1 rerun on flash, to see the hypothesis fix (d90cd18) work live. Background runs here were stopped by Claude Code's low-memory reaper. Run it in the foreground, or with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`.
+3. Grader: when the owner allows OpenAI usage, run terra and sol against the tightened gate and set the default.
 
 ## Commands
 
