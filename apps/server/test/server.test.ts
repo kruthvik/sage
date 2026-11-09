@@ -48,6 +48,9 @@ test("create → plan → approve → first item over the wire; a second client 
   const item = a.events.find(e => e.event === "item.present")?.data as { item: Record<string, unknown> } | undefined;
   if (item) { expect(item.item).not.toHaveProperty("key"); expect(item.item).not.toHaveProperty("rubric"); }
   expect((await b.rpc("session.resume", { sessionId, takeLease: true })).error).toBeUndefined();
+  // a reconnecting client gets the current item back from state.get, in its public form (no key, no rubric)
+  const cur = ((await b.rpc("state.get", { sessionId })).result as { current: { itemId: string; item: Record<string, unknown> } | null }).current;
+  if (cur) { expect(cur.item.id).toBe(cur.itemId); expect(cur.item).not.toHaveProperty("key"); expect(cur.item).not.toHaveProperty("rubric"); }
   expect((await a.rpc("control.stop", { sessionId })).error?.code).toBe(ERR.lease);
   a.ws.close(); b.ws.close();
 });
@@ -55,6 +58,7 @@ test("create → plan → approve → first item over the wire; a second client 
 test("the dev console's inline script parses", async () => {
   const { CONSOLE_HTML } = await import("../src/console.ts");
   expect(() => new Function(CONSOLE_HTML.split("<script>")[1]!.split("</script>")[0]!)).not.toThrow();
+  for (const m of CONSOLE_HTML.matchAll(/onclick="([^"]*)"/g)) expect(() => new Function(m[1]!)).not.toThrow(); // quote escaping inside handlers
 });
 
 test("usage counters are local, on by default, and can be switched off", async () => {

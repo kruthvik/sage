@@ -37,7 +37,7 @@ Connect to `ws://127.0.0.1:<port>/ws?token=<token>`. Requests whose Host or Orig
 | `pace.set` | sessionId, pace | learner (lease) |  |
 | `time.extend` | sessionId, minutes | learner (lease) |  |
 | `reviews.consent` | sessionId, subskillIds | learner (lease) |  |
-| `state.get` | sessionId | read |  |
+| `state.get` | sessionId | read | The session view plus `current` ({itemId, item} with the item in its public form, as on `item.present`; null when no item is waiting), `feedbackAttemptId` and the last 30 timeline entries. A reconnecting client uses it to show the waiting item again. |
 | `context.inspect` | sessionId | read | dev: the tutor packet as it would be built now |
 | `research.status` | sessionId | read |  |
 | `research.pack` | sessionId, packId | read |  |

@@ -13,7 +13,7 @@ button{font:inherit;padding:6px 10px;margin:4px 4px 0 0;border:1px solid var(--l
 button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 #log{height:420px;overflow:auto;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap}
 .ev{border-bottom:1px solid var(--line);padding:4px 0;white-space:pre-wrap}.slot{display:block;margin:4px 0}.cases{display:flex;gap:8px;flex-wrap:wrap}.cases>div{flex:1 1 220px;border:1px solid var(--line);padding:8px}.err{color:var(--err)}
-#stage>div{margin-bottom:12px}.choice{display:block;width:100%;text-align:left}
+#stage>div{margin-bottom:12px}#stage p,#stage li{white-space:pre-wrap}.choice{display:block;width:100%;text-align:left}
 </style></head><body><main>
 <div>
 <section><h1>Sage dev console</h1>
@@ -38,19 +38,24 @@ button.primary{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 <section><h2>Session</h2><div id="stage"><div class="mute">No session yet.</div></div>
 <div id="answer" hidden><textarea id="resp" rows="4" placeholder="Your answer"></textarea>
 <button class="primary" onclick="submit()">Submit</button><button onclick="call('hint.request',{level:1})">Hint 1</button><button onclick="call('hint.request',{level:2})">Hint 2</button><button onclick="call('hint.request',{level:3})">Hint 3</button><button onclick="call('chunk.peek')">Peek chunk</button></div>
-<div><button onclick="call('plan.approve')">Approve plan</button><button onclick="ack()">OK, next</button><button onclick="call('control.advance')">Advance</button><button onclick="call('control.morePractice')">More practice</button><button onclick="call('control.teach')">Teach me</button><button onclick="call('pace.set',{pace:'speed_up'})">Speed up</button><button onclick="call('control.stop')">Stop</button><button onclick="accept()">Accept research</button><button onclick="state()">State</button><button onclick="exp()">Export</button><label><input type="checkbox" id="usage" checked onchange="rpc('usage.set',{enabled:this.checked}).then(v=>log('usage counters '+(v.enabled?'on':'off')+' (local only, nothing uploaded)'))"> Usage counters</label><button onclick="dispute()">Dispute grade</button></div>
+<div><button onclick="call('plan.approve')">Approve plan</button><button onclick="ack()">OK, next</button><button onclick="call('control.advance')">Advance</button><button onclick="call('control.morePractice')">More practice</button><button onclick="call('control.teach')">Teach me</button><button onclick="call('pace.set',{pace:'speed_up'})">Speed up</button><button onclick="call('control.stop')">Stop</button><button onclick="call('control.resume').then(v=>v&&state())">Resume</button><button onclick="call('control.leaveWithGaps')">Leave node with gaps</button><button onclick="accept()">Accept research</button><button onclick="state()">State</button><button onclick="exp()">Export</button><label><input type="checkbox" id="usage" checked onchange="rpc('usage.set',{enabled:this.checked}).then(v=>log('usage counters '+(v.enabled?'on':'off')+' (local only, nothing uploaded)'))"> Usage counters</label><button onclick="dispute()">Dispute grade</button></div>
 </section>
 </div>
 <section><h2>Events</h2><div id="log" aria-live="polite"></div></section>
 </main><script>
-const ws=new WebSocket(location.origin.replace('http','ws')+'/ws'+location.search);let n=0,sid=null,feedback=null,pack=null,fit=null,lastAttempt=null;const pending={};
+let ws;let n=0,sid=null,feedback=null,pack=null,fit=null,lastAttempt=null;const pending={};
 const $=id=>document.getElementById(id);
 const log=(t,c)=>{const d=document.createElement('div');d.className='ev '+(c||'');d.textContent=t;$('log').prepend(d)};
-const rpc=(method,params={})=>new Promise((res,rej)=>{const id=++n;pending[id]={res,rej};ws.send(JSON.stringify({jsonrpc:'2.0',id,method,params}))});
+const rpc=(method,params={})=>new Promise((res,rej)=>{if(!ws||ws.readyState!==1)return rej(new Error('not connected; reconnecting'));const id=++n;pending[id]={res,rej};ws.send(JSON.stringify({jsonrpc:'2.0',id,method,params}))});
 const call=(m,p={})=>rpc(m,{sessionId:sid,...p}).then(v=>(m==='state.get'&&log(JSON.stringify(v,null,1).slice(0,3000)),v)).catch(e=>log(m+': '+e.message,'err'));
-ws.onopen=async()=>{for(const s of await rpc('session.list')){const o=document.createElement('option');o.value=s.sessionId;o.textContent=(s.objective||s.sessionId).slice(0,60);$('sessions').append(o)}};
-ws.onmessage=m=>{const x=JSON.parse(m.data);if(x.id&&pending[x.id]){x.error?pending[x.id].rej(new Error(x.error.message)):pending[x.id].res(x.result);delete pending[x.id];return}
- if(x.method!=='event')return;const e=x.params,d=e.data;log(e.event+' '+JSON.stringify(d).slice(0,400),e.event==='error'?'err':'');show(e.event,d)};
+function connect(){ws=new WebSocket(location.origin.replace('http','ws')+'/ws'+location.search);ws.onopen=opened;ws.onmessage=got;
+ ws.onclose=()=>{for(const k in pending){pending[k].rej(new Error('connection lost'));delete pending[k]}log('Connection lost. Reconnecting…','err');setTimeout(connect,2000)}}
+let first=true;
+async function opened(){if(!first){log('Reconnected.');if(sid)resume(sid);return}first=false;
+ rpc('usage.get',{}).then(v=>{$('usage').checked=v.enabled!==false}).catch(()=>{});rpc('settings.get',{}).then(v=>{const m=v.roleModels.transcriber;if(m)tmodel=m.provider+'/'+m.model;if(v.vaultPath)$('vault').value=v.vaultPath}).catch(()=>{});sources();
+ for(const s of await rpc('session.list')){const o=document.createElement('option');o.value=s.sessionId;o.textContent=(s.objective||s.sessionId).slice(0,60);$('sessions').append(o)}};
+function got(m){const x=JSON.parse(m.data);if(x.id&&pending[x.id]){x.error?pending[x.id].rej(new Error(x.error.message)):pending[x.id].res(x.result);delete pending[x.id];return}
+ if(x.method!=='event')return;const e=x.params,d=e.data;log(e.event+' '+JSON.stringify(d).slice(0,400),e.event==='error'?'err':'');show(e.event,d)}
 function show(ev,d){const st=$('stage');const box=h=>{const div=document.createElement('div');div.innerHTML=h;st.prepend(div)};const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
  const q=s=>esc(s).replace(/"/g,'&quot;');
  const cites=l=>(l||[]).length?'<p class="mute">Source: '+l.map(c=>c.link?'<a href="'+q(c.link)+'" data-span="'+q(c.spanId)+'" onclick="openSrc(this)" target="_blank" rel="noopener noreferrer">'+esc(c.title+' '+c.locator)+'</a>':esc(c.title+' '+c.locator)).join('; ')+'</p>':'';
@@ -65,8 +70,13 @@ function show(ev,d){const st=$('stage');const box=h=>{const div=document.createE
    +(t==='scrap_work'?'<p><label>Photo of your working <input type="file" class="photo" accept="image/png,image/jpeg,image/webp" multiple></label> <button onclick="photo(this)">Send photo</button> <span class="mute">or type your working below</span></p>':''))}
  if(ev==='transcription.review')box('<b>Check the transcription</b><p>Fix anything that was misread. Only the text you confirm is graded.</p><textarea class="tr" rows="8" aria-label="Transcription of your working">'+esc(d.text)+'</textarea><p><button class="primary" onclick="confirmTr(this)">Confirm and submit</button></p>');
  if(ev==='feedback.present'){feedback=d.attemptId;lastAttempt=d.attemptId;
-  box('<b>Score '+d.grade.score0to100+'</b><p>'+esc(d.grade.feedback)+'</p>'+cites(d.citations))}
- if(ev==='repair.required')box('<b>Fix this first</b><ul>'+d.flaws.map(f=>'<li>"'+esc(f.quote)+'": '+esc(f.problem)+'</li>').join('')+'</ul>');
+  const g=d.grade,crit=(g.criterionEvidence||[]).map(c=>'<li>'+(c.satisfied===true?'met':c.satisfied===false?'not met':'not observed')+': '+esc(c.criterion)+(c.quote?' <i>"'+esc(c.quote)+'"</i>':'')+'</li>').join('');
+  const fl=(g.flaws||[]).map(f=>'<li><b>'+esc(f.severity)+'</b>: '+(f.quote?'"'+esc(f.quote)+'" ':'')+esc(f.problem)+(f.suggestion?' Try: '+esc(f.suggestion):'')+'</li>').join('');
+  box('<b>Score '+g.score0to100+'</b><p>'+esc(g.feedback)+'</p>'+(crit?'<p class="mute">Criteria</p><ul>'+crit+'</ul>':'')+(fl?'<p class="mute">Flaws</p><ul>'+fl+'</ul>':'')+cites(d.citations)+'<p class="mute">Press OK, next to continue, or Dispute grade.</p>')}
+ if(ev==='repair.required'){box('<b>Fix this first, then submit again</b><ul>'+d.flaws.map(f=>'<li>"'+esc(f.quote)+'": '+esc(f.problem)+'</li>').join('')+'</ul>');$('answer').hidden=false;st.querySelectorAll('button[disabled]').forEach(b=>b.disabled=false)}
+ if(ev==='error'&&d.retry)box('<b class="err">A model call failed</b><p>'+esc(d.message||d.code||'')+'</p><button class="primary" onclick="retry()">Retry</button>');
+ if(ev==='confirm.required'&&d.action==='leaveWithGaps'&&confirm(d.text))call('control.leaveWithGaps',{confirmToken:d.token});
+ if(ev==='export.ready')box('<b>Export: '+esc(d.what)+'</b><p>'+(d.available?'Written to '+esc(d.dir||''):esc(d.note||'not available'))+'</p>');
  if(ev==='hint.reveal')box('<b>Hint</b><p>'+esc(d.text)+'</p>');
  if(ev==='plan.changed'||ev==='notice'||ev==='pace.notice'||ev==='research.ready')box('<i>'+esc(d.text)+'</i>');
  if(ev==='plan.changed')call('plan.get').then(p=>p&&box('<b>Plan</b><ol>'+p.nodes.map(n=>'<li>'+esc(n.title)+' <span class="mute">('+n.estMinutes+' min; '+n.subskills.map(x=>esc(x.statement)).join('; ')+')</span></li>').join('')+'</ol>'));
@@ -101,12 +111,14 @@ const photo=async b=>{const files=[...b.parentElement.querySelector('input.photo
  const b64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
  b.disabled=true;call('image.consent',{images:await Promise.all(files.map(async f=>({dataBase64:await b64(f)})))}).then(v=>v&&log('Reading your working…'))};
 const confirmTr=b=>{const t=b.closest('div').querySelector('textarea.tr').value;if(!t.trim())return log('The transcription is empty.','err');b.disabled=true;call('transcription.confirm',{text:t});$('answer').hidden=true};
+const retry=()=>call('session.retry');
 const ack=()=>feedback&&call('feedback.ack',{attemptId:feedback}).then(()=>feedback=null);
-const state=()=>call('state.get');
+const state=()=>call('state.get').then(v=>{if(!v)return v;feedback=v.feedbackAttemptId||null;if(feedback)lastAttempt=feedback;if(v.current&&v.current.item&&!feedback)show('item.present',{item:v.current.item});return v});
 const exp=()=>call('export.get').then(v=>v&&log('Exported to '+v.dir+(v.userEdited.length?' (kept your edits: '+v.userEdited.join(', ')+')':'')+'\\n\\n'+v.sessionMd.slice(0,6000)));
-ws.addEventListener('open',()=>{rpc('usage.get',{}).then(v=>{$('usage').checked=v.enabled!==false}).catch(()=>{});rpc('settings.get',{}).then(v=>{const m=v.roleModels.transcriber;if(m)tmodel=m.provider+'/'+m.model;if(v.vaultPath)$('vault').value=v.vaultPath}).catch(()=>{});sources()});
+
 const extend=()=>call('time.extend',{minutes:fit.estMin-fit.budgetMin}),speed=()=>call('pace.set',{pace:'speed_up'});
 async function merge(){for(const g of fit.mergeGroups)await call('plan.merge',{nodeIds:g})}
 function dispute(){if(!lastAttempt)return log('nothing to dispute','err');const a=prompt('Why is the grade or answer key wrong?');if(a)call('grade.dispute',{attemptId:lastAttempt,argument:a})}
 async function accept(){const s=await call('research.status');const p=s&&s.packs.find(p=>p.status==='pending');if(p)call('sources.acceptPack',{packId:p.id});else log('no pending research pack')}
+connect();
 </script></body></html>`;

@@ -10,6 +10,7 @@ import { SessionDriver, type DriverRuntime, type ServerEvent } from "../../../pa
 import { DEFAULT_ROLE_MODELS, GRADER_CALIBRATION, type RoleModels } from "../../../packages/agent/src/host.ts";
 import { buildPacket } from "../../../packages/agent/src/packet.ts";
 import { EngineError, replay } from "../../../packages/engine/src/loop.ts";
+import { publicItem } from "../../../packages/engine/src/state.ts";
 import { usedMin } from "../../../packages/engine/src/pacing.ts";
 import { IMAGE_LIMITS, putImage } from "../../../packages/storage/src/blobs.ts";
 import { SourceStore } from "../../../packages/sources/src/store.ts";
@@ -132,7 +133,7 @@ export function startServer(opts: ServeOptions) {
       case "pace.set": return act({ type: "pace_set", pace: p.pace as "normal" | "speed_up" });
       case "time.extend": return act({ type: "time_extended", minutes: p.minutes as number });
       case "reviews.consent": return act({ type: "reviews_consented", subskillIds: p.subskillIds as string[] });
-      case "state.get": { const d = driver(id!); c.sessions.add(id!); return { ...d.view(), current: d.state.current ? { itemId: d.state.current.itemId } : null, feedbackAttemptId: d.state.feedbackAttemptId ?? null, timeline: d.state.timeline.slice(-30) }; }
+      case "state.get": { const d = driver(id!); c.sessions.add(id!); return { ...d.view(), current: d.state.current ? { itemId: d.state.current.itemId, item: publicItem(d.state.items.get(d.state.current.itemId)!) } : null, feedbackAttemptId: d.state.feedbackAttemptId ?? null, timeline: d.state.timeline.slice(-30) }; }
       case "context.inspect": { const d = driver(id!); return buildPacket(d.state, d.state.candidates, "(inspection)"); }
       case "research.status": return { packs: driver(id!).view().packs, searchAvailable: true };
       case "research.pack": { const pk = driver(id!).state.packs.get(p.packId as string); if (!pk) throw new RpcError(ERR.params, "unknown pack"); return pk; }
